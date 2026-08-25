@@ -1,0 +1,14 @@
+# Reference settings for the minimal-compute experiment. Scripts expose these
+# values as argparse flags so the repo has no Hydra runtime requirement yet.
+seed: 0
+env:
+  max_steps: 100
+world_model:
+  latent_dim: 32
+  batch_size: 128
+  train_steps: 1000
+planner:
+  candidates: 128
+  horizon: 8
+evaluation:
+  episodes: 30

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "embodied-world-model"
+version = "0.1.0"
+description = "A tiny action-conditioned latent world model for embodied RL."
+requires-python = ">=3.11"
+dependencies = ["gymnasium>=0.29", "jax>=0.4.30", "flax>=0.8.5", "optax>=0.2.3", "numpy>=1.26", "matplotlib>=3.8", "pandas>=2.0", "pyarrow>=15", "huggingface_hub>=0.24"]
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+ui = ["streamlit>=1.35"]
+[tool.setuptools.packages.find]
+include = ["ewm*"]
+[tool.ruff]
+line-length = 100

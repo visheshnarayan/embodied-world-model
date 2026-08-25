@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: "Embodied World Model RL"
+message: "If this project is useful, please cite it."
+type: software
+authors:
+  - family-names: Narayan
+    given-names: Vishesh
+version: 0.1.0
+date-released: 2026-08-25
+license: MIT
