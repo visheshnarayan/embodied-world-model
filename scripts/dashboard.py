@@ -28,7 +28,15 @@ with tab_visual:
     st.subheader("SingleArm visual observations")
     videos=sorted((ROOT/"data/single_arm/panda-stack-wide/videos").glob("**/*.mp4"))
     if videos:
-        labels=[str(v.relative_to(ROOT)) for v in videos]; choice=st.selectbox("Episode/camera",range(len(videos)),format_func=lambda i: labels[i]); st.video(str(videos[choice])); st.caption("These are dataset videos; the current world model still trains on state/action data only.")
+        labels=[str(v.relative_to(ROOT)) for v in videos]
+        choice=st.selectbox("Episode/camera",range(len(videos)),format_func=lambda i: labels[i],key="video_choice")
+        selected=videos[choice]
+        @st.cache_data(show_spinner=False)
+        def read_video(path): return Path(path).read_bytes()
+        clip=read_video(str(selected))
+        st.video(clip,format="video/mp4",autoplay=False,loop=True,muted=False)
+        st.download_button("Download selected clip",clip,file_name=selected.name,mime="video/mp4")
+        st.caption("The clip is loaded as stable bytes so browser playback does not depend on the local filesystem path after Streamlit reruns.")
     else:
         st.warning("No sample videos found. Download visual samples with scripts/download_single_arm.py or the commands in the README.")
 with tab_model:
