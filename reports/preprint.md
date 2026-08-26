@@ -54,6 +54,8 @@ The first data-scaling sweep used 10/25/50/100 episodes and 500 updates. Absolut
 
 The learned-simulator policy smoke test used the 100-episode raw model, five episodes, and ten model steps. Mean dense goal-progress return was -0.0914 for random actions, -0.0561 for goal-conditioned behavior cloning, and -0.0277 for CEM. Sparse success was 0.0 for all methods, so this is evidence of a planning signal rather than a completed control result.
 
+The task-aware Panda stacking smoke test used the same model with three episodes and ten model steps. Returns were -0.5276 random, -0.5322 behavior cloning, and 0.0292 CEM. Success means box 0 is within 6 cm horizontally of box 1 and 3–9 cm above it; all methods still had 0% sparse success.
+
 ## Claims boundary
 
 This is a controlled educational benchmark, not evidence of general robot intelligence. The useful result is a transparent demonstration of the loop: collect transitions, learn action-conditioned predictions, plan in the learned model, and quantify both model quality and downstream behavior. A stronger preprint should add PPO/SAC, confidence intervals over at least five seeds, held-out target distributions, compute/runtime, and pixel or MuJoCo validation.

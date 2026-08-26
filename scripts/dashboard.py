@@ -61,10 +61,10 @@ with tab_model:
 with tab_control:
     st.subheader("Policy/planner comparison")
     st.write("These are evaluations inside the learned dynamics simulator, not physical robot trials.")
-    st.dataframe(pd.DataFrame({"Controller":["Random","Behavior cloning","CEM"],"Mean dense return":[-0.0914,-0.0561,-0.0277],"Sparse success":[0.,0.,0.]}),use_container_width=True)
+    st.dataframe(pd.DataFrame({"Controller":["Random","Behavior cloning","CEM"],"Task-aware stacking return":[-0.5276,-0.5322,0.0292],"Sparse success":[0.,0.,0.]}),use_container_width=True)
     image=FIG/"single_arm_scaling.png"
     if image.exists(): st.image(str(image),caption="Data scaling and preprocessing variants")
-    st.warning("Current benchmark has a planning signal but no reliable sparse task success yet.")
+    st.warning("Task-aware CEM has a positive dense stacking-progress signal, but sparse stacking success is not reliable yet.")
 with tab_files:
     st.subheader("Generated artifacts")
     for path in sorted(ART.rglob("*")):

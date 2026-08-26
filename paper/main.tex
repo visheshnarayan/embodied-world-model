@@ -67,6 +67,8 @@ Using the 100-episode raw model, teacher-forced model rollouts had MSE 0.0127, 0
 
 In a preliminary learned-simulator comparison on five episodes and ten model steps, mean dense goal-progress returns were $-0.0914$ for random actions, $-0.0561$ for goal-conditioned behavior cloning, and $-0.0277$ for CEM planning. All three methods had zero sparse successes in this short evaluation. These results indicate a useful planning signal, but not yet reliable task completion.
 
+After adding the Panda stacking-specific metric, a three-episode smoke test at ten model steps produced returns of $-0.5276$ for random actions, $-0.5322$ for behavior cloning, and $0.0292$ for CEM. The stacking success criterion is horizontal box separation below 6~cm and vertical gap between 3 and 9~cm. CEM's positive dense progress is encouraging, but sparse success remained zero.
+
 \section{Results and Figures}
 The primary figures are (i) prediction error versus data fraction, (ii) error versus rollout horizon, (iii) downstream control success versus environment interactions, and (iv) qualitative real-state and predicted-state trajectories. Figures are generated from the repository scripts and saved under \texttt{artifacts/figures/}.
 
