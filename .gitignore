@@ -5,3 +5,7 @@ __pycache__/
 artifacts/
 data/
 *.egg-info/
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.pdf

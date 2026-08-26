@@ -1,0 +1,17 @@
+{
+  "dataset": "nvidia/PhysicalAI-Robotics-Manipulation-SingleArm",
+  "task": "panda-stack-wide",
+  "robot": "Franka Panda",
+  "state_dim": 53,
+  "action_dim": 7,
+  "state_names_source": "ewm.isaac_bridge.SINGLE_ARM_STATE_NAMES",
+  "action_names_source": "ewm.isaac_bridge.SINGLE_ARM_ACTION_NAMES",
+  "action_semantics": "ee position delta x/y/z, ee rotation-vector delta x/y/z, gripper",
+  "stacking_success": {
+    "horizontal_distance_m": 0.06,
+    "vertical_gap_min_m": 0.03,
+    "vertical_gap_max_m": 0.09
+  },
+  "episode_horizon": 50,
+  "notes": "Use the exact ordering in ewm/isaac_bridge.py for Isaac observations and actions."
+}

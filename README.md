@@ -101,6 +101,25 @@ After vectorizing CEM candidate evaluation, the learned Panda stacking simulator
 
 On CPU, the credible first milestone is a stable next-state prediction loss and an MPC controller that beats random exploration on this toy task. A laptop should handle smoke tests and small experiments in minutes; a GPU makes 10k–100k updates practical. Do not claim broad robot generalization from this benchmark: report seeds, prediction MSE, model/planner horizons, and environment steps.
 
+## Isaac Lab handoff
+
+The local benchmark is complete through offline model-based RL. The exact
+SingleArm Panda state/action ordering and stacking thresholds are locked in
+[`ewm/isaac_bridge.py`](ewm/isaac_bridge.py) and
+[`configs/single_arm_isaac_contract.json`](configs/single_arm_isaac_contract.json).
+Run the preflight before moving to an Isaac machine:
+
+```bash
+python scripts/preflight_isaac.py
+```
+
+The remaining implementation is a thin Isaac Lab `DirectRLEnv`: instantiate
+the Panda and two cubes, route the 7-D end-effector delta action through Isaac
+Lab's controller, emit the 53 state values, and reuse the existing stacking
+metric. See [`isaaclab_extension/README.md`](isaaclab_extension/README.md).
+Isaac Sim is not expected to run on this macOS development host; use a
+Linux/Windows NVIDIA RTX workstation or cloud GPU for that final validation.
+
 ## Stretch goals
 
 1. Pixel observations and a convolutional encoder (64×64).
