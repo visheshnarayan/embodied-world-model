@@ -1,0 +1,6 @@
+controller,horizon,candidates,iterations,episodes,max_steps,mean_return,success_rate
+random,0,0,0,10,50,0.609938,0.20
+behavior_cloning,0,0,0,10,50,-1.238345,0.00
+cem,4,128,4,10,50,0.657405,0.30
+cem,10,128,4,10,50,1.566851,0.60
+cem,20,128,4,10,50,2.766814,0.80

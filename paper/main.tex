@@ -69,6 +69,8 @@ In a preliminary learned-simulator comparison on five episodes and ten model ste
 
 After adding the Panda stacking-specific metric, a three-episode smoke test at ten model steps produced returns of $-0.5276$ for random actions, $-0.5322$ for behavior cloning, and $0.0292$ for CEM. The stacking success criterion is horizontal box separation below 6~cm and vertical gap between 3 and 9~cm. CEM's positive dense progress is encouraging, but sparse success remained zero.
 
+We then vectorized CEM candidate evaluation and ran 10 episodes for 50 control steps with 128 candidates and four CEM iterations. CEM stacking success rose from 30\% at planning horizon 4 to 60\% at horizon 10 and 80\% at horizon 20. Random actions reached 20\% and behavior cloning 0\% under the same learned-simulator protocol. These results support the hypothesis that longer imagined action sequences improve task-aware planning, but they remain simulator results and require held-out seeds and real/Isaac Sim validation.
+
 \section{Results and Figures}
 The primary figures are (i) prediction error versus data fraction, (ii) error versus rollout horizon, (iii) downstream control success versus environment interactions, and (iv) qualitative real-state and predicted-state trajectories. Figures are generated from the repository scripts and saved under \texttt{artifacts/figures/}.
 

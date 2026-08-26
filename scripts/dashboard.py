@@ -61,7 +61,8 @@ with tab_model:
 with tab_control:
     st.subheader("Policy/planner comparison")
     st.write("These are evaluations inside the learned dynamics simulator, not physical robot trials.")
-    st.dataframe(pd.DataFrame({"Controller":["Random","Behavior cloning","CEM"],"Task-aware stacking return":[-0.5276,-0.5322,0.0292],"Sparse success":[0.,0.,0.]}),use_container_width=True)
+    horizon_results=pd.DataFrame({"Controller":["Random","Behavior cloning","CEM h=4","CEM h=10","CEM h=20"],"Task-aware stacking return":[0.6099,-1.2383,0.6574,1.5669,2.7668],"Sparse success":[.20,0.,.30,.60,.80]}); st.dataframe(horizon_results,use_container_width=True)
+    st.bar_chart(horizon_results.set_index("Controller")["Sparse success"])
     image=FIG/"single_arm_scaling.png"
     if image.exists(): st.image(str(image),caption="Data scaling and preprocessing variants")
     st.warning("Task-aware CEM has a positive dense stacking-progress signal, but sparse stacking success is not reliable yet.")

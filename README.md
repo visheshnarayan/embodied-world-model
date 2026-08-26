@@ -93,6 +93,10 @@ The benchmark logs task success, mean and standard-deviation return, final cube-
 
 The first generated run is stored under `artifacts/`: 2 seeds, 5 evaluation episodes, and 0/50 model updates. It currently shows 0% sparse success for both methods, but world-model MPC improves mean return and final distance. Treat this as a validated baseline and debugging checkpoint, not as evidence of superiority.
 
+## Long-horizon task-aware result
+
+After vectorizing CEM candidate evaluation, the learned Panda stacking simulator was evaluated for 10 episodes, 50 control steps, 128 candidates, and 4 CEM iterations. CEM success increased with planning horizon: 30% at horizon 4, 60% at horizon 10, and 80% at horizon 20. Random achieved 20% and behavior cloning 0% under the same learned-simulator protocol. The tracked result table is [reports/long_horizon_results.csv](reports/long_horizon_results.csv).
+
 ## Minimal compute and honest scope
 
 On CPU, the credible first milestone is a stable next-state prediction loss and an MPC controller that beats random exploration on this toy task. A laptop should handle smoke tests and small experiments in minutes; a GPU makes 10k–100k updates practical. Do not claim broad robot generalization from this benchmark: report seeds, prediction MSE, model/planner horizons, and environment steps.

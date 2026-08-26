@@ -26,6 +26,7 @@ class TabularWorldModel:
     def train_step(self,obs,action,next_obs):
         self.params,self.opt_state,loss=self._compiled(self.params,self.opt_state,*map(jnp.asarray,(obs,action,next_obs))); return float(loss)
     def predict(self,obs,action): return np.asarray(self.net.apply(self.params,jnp.asarray(obs)[None],jnp.asarray(action)[None])[0])
+    def predict_batch(self,obs,action): return np.asarray(self.net.apply(self.params,jnp.asarray(obs),jnp.asarray(action)))
     def save(self,path,metadata):
         with open(path,"wb") as f: pickle.dump({"params":self.params,"metadata":metadata},f)
 
