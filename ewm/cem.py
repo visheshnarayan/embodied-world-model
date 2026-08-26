@@ -9,7 +9,7 @@ def cem_action(env, rng, horizon=8, candidates=64, iterations=3, elite_fraction=
         for sequence in sequences:
             state=env.state.copy(); score=0.
             for action in sequence:
-                state=env.model.predict(state,action); score-=np.linalg.norm(state-env.goal)/np.sqrt(env.obs_dim)
+                state=env.model.predict(state,action); score-=env._distance(state)
             scores.append(score)
         elite=sequences[np.argsort(scores)[-max(2,int(candidates*elite_fraction)):]]; mean=elite.mean(0); std=np.maximum(elite.std(0),.05*(high-low))
     return np.clip(mean[0],low,high).astype(np.float32)

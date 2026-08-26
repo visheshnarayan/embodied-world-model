@@ -3,7 +3,7 @@ import numpy as np
 from ewm.model_env import LearnedDynamicsEnv
 from ewm.policy import BehaviorCloningPolicy
 
-parser=argparse.ArgumentParser(); parser.add_argument("policy"); parser.add_argument("model"); parser.add_argument("dataset"); parser.add_argument("--episodes",type=int,default=20); parser.add_argument("--seed",type=int,default=0); parser.add_argument("--max-steps",type=int,default=30); args=parser.parse_args(); policy,_=BehaviorCloningPolicy.load(args.policy); env=LearnedDynamicsEnv(args.model,args.dataset,args.seed,max_steps=args.max_steps); returns=[]; successes=0
+parser=argparse.ArgumentParser(); parser.add_argument("policy"); parser.add_argument("model"); parser.add_argument("dataset"); parser.add_argument("--episodes",type=int,default=20); parser.add_argument("--seed",type=int,default=0); parser.add_argument("--max-steps",type=int,default=30); args=parser.parse_args(); policy,_=BehaviorCloningPolicy.load(args.policy); env=LearnedDynamicsEnv(args.model,args.dataset,args.seed,max_steps=args.max_steps,task="stacking"); returns=[]; successes=0
 for episode in range(args.episodes):
     env.reset(seed=args.seed+episode); done=False; total=0.
     while not done:

@@ -85,6 +85,8 @@ The first command measures compounding 1/5/10-step prediction error. The second 
 
 The first learned-simulator policy smoke test, using five episodes and ten model steps, produced mean dense returns of `-0.0914` random, `-0.0561` behavior cloning, and `-0.0277` CEM. Sparse success was still zero for all methods; longer horizons, better model calibration, and task-specific rewards are required next.
 
+For `panda-stack-wide`, the task-aware benchmark now defines success as box 0 being horizontally within 6 cm of box 1 with a vertical gap between 3 and 9 cm. State indices are taken from the dataset metadata: box 0 is state dimensions 0–2 and box 1 is 14–16.
+
 ## Benchmark metrics
 
 The benchmark logs task success, mean and standard-deviation return, final cube-target distance, episode length, contact rate, environment seed, training updates, and held-out one-step model MSE. The most useful first figure is success rate and final distance for world-model MPC versus random across seeds. Pass several `--train-steps` values (for example 0, 250, 1000, 5000) in one run to create a sample-efficiency table.
