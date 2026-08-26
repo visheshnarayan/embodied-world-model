@@ -1,6 +1,7 @@
 """Local experiment dashboard: streamlit run scripts/dashboard.py"""
 from pathlib import Path
 import json
+import subprocess
 import pandas as pd
 import streamlit as st
 
@@ -36,7 +37,16 @@ with tab_visual:
         clip=read_video(str(selected))
         st.video(clip,format="video/mp4",autoplay=False,loop=True,muted=False)
         st.download_button("Download selected clip",clip,file_name=selected.name,mime="video/mp4")
-        st.caption("The clip is loaded as stable bytes so browser playback does not depend on the local filesystem path after Streamlit reruns.")
+        probe=subprocess.run(["ffprobe","-v","error","-count_frames","-select_streams","v:0","-show_entries","stream=nb_read_frames,r_frame_rate","-of","default=noprint_wrappers=1",str(selected)],capture_output=True,text=True,check=False)
+        frame_count=1
+        for line in probe.stdout.splitlines():
+            if line.startswith("nb_read_frames="):
+                try: frame_count=int(line.split("=",1)[1])
+                except ValueError: pass
+        frame_index=st.slider("Inspect frame",0,max(0,frame_count-1),min(frame_count//2,frame_count-1),key="frame_index")
+        frame=subprocess.run(["ffmpeg","-loglevel","error","-i",str(selected),"-vf",f"select=eq(n\\,{frame_index})","-frames:v","1","-f","image2pipe","-vcodec","png","pipe:1"],capture_output=True,check=False).stdout
+        if frame: st.image(frame,caption=f"Frame {frame_index+1}/{frame_count}",width="stretch")
+        st.caption(f"{frame_count} frames at 30 FPS ({frame_count/30:.2f} seconds). The downloaded samples are short task episodes, not blank clips.")
     else:
         st.warning("No sample videos found. Download visual samples with scripts/download_single_arm.py or the commands in the README.")
 with tab_model:
