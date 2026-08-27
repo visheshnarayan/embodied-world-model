@@ -1,4 +1,6 @@
-# Embodied World Model RL (JAX + Gymnasium)
+# Contact in Latent Space
+
+### Learning to predict, imagine, and control contact-rich robot manipulation
 
 ![Panda stacking sequence](assets/dataset_header/panda_world_sequence.png)
 
