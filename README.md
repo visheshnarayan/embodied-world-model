@@ -4,7 +4,7 @@
 
 ![Isaac Lab Panda rollout](assets/isaaclab/panda_stack_rollout_sequence.png)
 
-JAX RL running in Isaac Lab
+JAX reinforcement learning in Isaac Lab
 
 ![Isaac Lab Panda scene](assets/isaaclab/panda_stack_scene_overview.png)
 
