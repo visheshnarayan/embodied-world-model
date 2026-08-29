@@ -22,7 +22,7 @@ class PushCubeEnv(gym.Env):
         return self.state.copy(), {"success":False}
     def step(self, action):
         action=np.clip(np.asarray(action,np.float32),-1,1); hand,cube,target=self.state[:2],self.state[4:6],self.state[6:8]
-        old=np.linalg.norm(cube-target); hand[:]=np.clip(hand+.06*action,-1,1)
+        old=np.linalg.norm(cube-target); hand[:]=np.clip(hand+.045*action,-1,1)
         contact = bool(np.linalg.norm(hand-cube)<.16)
         if contact: cube[:]=np.clip(cube+.045*action,-.8,.8)
         new=np.linalg.norm(cube-target); success=bool(new<.10)
