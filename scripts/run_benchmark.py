@@ -33,10 +33,11 @@ def main():
                             "model_one_step_mse": one_step_model_mse(model, data)})
             rows.append(learned)
             print(seed, train_steps, learned["success_rate"])
-        random = evaluate_controller("random", args.eval_episodes, seed, args.candidates, args.horizon)
-        random.update({"method": "random", "train_updates": 0, "model_one_step_mse": np.nan})
-        rows.append(random)
-        print(seed, learned["success_rate"], random["success_rate"])
+        for name in ("random", "scripted"):
+            baseline = evaluate_controller(name, args.eval_episodes, seed, args.candidates, args.horizon)
+            baseline.update({"method": name, "train_updates": 0, "model_one_step_mse": np.nan})
+            rows.append(baseline)
+        print(seed, learned["success_rate"], rows[-2]["success_rate"], rows[-1]["success_rate"])
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=rows[0].keys())

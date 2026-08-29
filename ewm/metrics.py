@@ -5,6 +5,13 @@ import numpy as np
 from .env import PushCubeEnv
 from .planner import mpc_action
 
+def scripted_action(env):
+    """Simple reach-then-push reference controller for the toy task."""
+    hand, cube, target = env.state[:2], env.state[4:6], env.state[6:8]
+    direction = cube - hand if np.linalg.norm(hand - cube) > 0.12 else target - cube
+    scale = max(float(np.linalg.norm(direction)), 1e-8)
+    return np.clip(direction / scale, -1.0, 1.0).astype(np.float32)
+
 
 def evaluate_controller(controller, episodes=20, seed=0, candidates=64, horizon=8):
     """Evaluate a controller and return metrics suitable for a CSV row."""
@@ -17,6 +24,8 @@ def evaluate_controller(controller, episodes=20, seed=0, candidates=64, horizon=
         while not done:
             if controller == "random":
                 action = rng.uniform(-1, 1, 2).astype(np.float32)
+            elif controller == "scripted":
+                action = scripted_action(env)
             else:
                 action = mpc_action(env, controller, rng, candidates, horizon)
             _, reward, terminated, truncated, info = env.step(action)
@@ -43,4 +52,3 @@ def evaluate_controller(controller, episodes=20, seed=0, candidates=64, horizon=
 def one_step_model_mse(model, data):
     predictions = [model.predict(o, a)[0] for o, a in zip(data["obs"], data["action"])]
     return float(np.mean((np.asarray(predictions) - data["next_obs"]) ** 2))
-
