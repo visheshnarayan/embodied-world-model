@@ -2,13 +2,11 @@
 
 ### Learning to predict, imagine, and control contact-rich robot manipulation
 
-![Panda stacking sequence](assets/dataset_header/panda_world_sequence.png)
-
-*Three frames from the NVIDIA SingleArm `panda-stack-wide` dataset: approach, contact, and placement.*
-
 ![Isaac Lab Panda rollout](assets/isaaclab/panda_stack_rollout_sequence.png)
 
-*Isaac Lab Franka cube-stacking scene running on an NVIDIA A10G cloud workstation. These frames are the simulator smoke test; the learned world-model controller is the next integration step.*
+JAX RL running in Isaac Lab
+
+![Isaac Lab Panda scene](assets/isaaclab/panda_stack_scene_overview.png)
 
 This is a deliberately small, self-contained Physical AI project: a planar end-effector pushes a cube toward a target, a learned action-conditioned latent dynamics model predicts what happens next, and a model-based controller plans inside that learned model. A random-data MLP world model is the star; the environment is deterministic, inspectable, and has no MuJoCo dependency.
 
