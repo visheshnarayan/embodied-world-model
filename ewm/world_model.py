@@ -16,7 +16,9 @@ class LatentDynamics(nn.Module):
 class WorldModel:
     def __init__(self,seed=0,latent_dim=32,lr=3e-4):
         self.net=LatentDynamics(latent_dim); self.params=self.net.init(jax.random.PRNGKey(seed),jnp.zeros((1,8)),jnp.zeros((1,2)))
-        self.tx=optax.adam(lr); self.opt_state=self.tx.init(self.params); self.lr=lr; self._compiled=jax.jit(self._make_step())
+        self.tx=optax.adam(lr); self.opt_state=self.tx.init(self.params); self.lr=lr
+        self._compiled=jax.jit(self._make_step())
+        self._predict_compiled=jax.jit(lambda params, obs, action: self.net.apply(params, obs, action))
     def _loss(self,p,obs,action,reward,next_obs):
         pred,r=self.net.apply(p,obs,action)
         return jnp.mean((pred-next_obs)**2)+.1*jnp.mean((r-reward)**2)
@@ -28,7 +30,11 @@ class WorldModel:
     def train_step(self,obs,action,reward,next_obs):
         self.params,self.opt_state,loss=self._compiled(self.params,self.opt_state,*map(jnp.asarray,(obs,action,reward,next_obs))); return float(loss)
     def predict(self,obs,action):
-        z,r=self.net.apply(self.params,jnp.asarray(obs)[None],jnp.asarray(action)[None]); return np.asarray(z[0]),float(r[0])
+        z,r=self._predict_compiled(self.params,jnp.asarray(obs)[None],jnp.asarray(action)[None]); return np.asarray(z[0]),float(r[0])
+    def predict_batch(self,obs,action):
+        """Predict a batch of imagined transitions in one JAX call."""
+        z,r=self._predict_compiled(self.params,jnp.asarray(obs),jnp.asarray(action))
+        return np.asarray(z),np.asarray(r)
     def save(self,path):
         with open(path,"wb") as f: pickle.dump(self.params,f)
     def load(self,path):
