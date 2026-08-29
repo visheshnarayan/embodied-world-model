@@ -4,7 +4,7 @@
 
 ![Isaac Lab Panda rollout](assets/isaaclab/panda_stack_rollout_sequence.png)
 
-JAX reinforcement learning in Isaac Lab
+*Cube-stacking experiments with a Franka Panda in Isaac Lab, using the simulation side of our JAX world-model pipeline.*
 
 ![Isaac Lab Panda scene](assets/isaaclab/panda_stack_scene_overview.png)
 
