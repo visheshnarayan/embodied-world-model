@@ -42,14 +42,6 @@ python scripts/plot_results.py --csv artifacts/benchmark.csv
 
 The benchmark compares random exploration, a scripted reference controller, and JAX world-model MPC. It records success rate, return, final distance, contact rate, episode length, and one-step prediction MSE. Generated CSVs and figures are written to `artifacts/`.
 
-The current five-seed candidate result is:
-
-| Method | Success rate |
-| --- | ---: |
-| Random | 0.0% |
-| Scripted reference | 100.0% |
-| World-model MPC | 25.6% ± 24.4% |
-
 ## Real-data track
 
 The primary data track uses NVIDIA's [PhysicalAI-Robotics-Manipulation-SingleArm dataset](https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Manipulation-SingleArm), an Isaac Sim Franka Panda collection with state, action, RGB, and depth observations.
