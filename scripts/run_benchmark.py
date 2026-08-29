@@ -18,11 +18,12 @@ def main():
     parser.add_argument("--eval-episodes", type=int, default=20)
     parser.add_argument("--candidates", type=int, default=64)
     parser.add_argument("--horizon", type=int, default=8)
+    parser.add_argument("--data-episodes", type=int, default=100)
     parser.add_argument("--output", default="artifacts/benchmark.csv")
     args = parser.parse_args()
     rows = []
     for seed in args.seeds:
-        data = collect_random(PushCubeEnv(), 100, seed)
+        data = collect_random(PushCubeEnv(), args.data_episodes, seed)
         for train_steps in args.train_steps:
             model = WorldModel(seed)
             rng = np.random.default_rng(seed)

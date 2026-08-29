@@ -11,7 +11,9 @@ class LatentDynamics(nn.Module):
     @nn.compact
     def __call__(self,obs,action):
         z=nn.tanh(nn.Dense(self.latent_dim)(obs)); h=nn.tanh(nn.Dense(64)(jnp.concatenate([z,action],-1)))
-        next_obs=nn.tanh(nn.Dense(8)(h)); return next_obs,nn.Dense(1)(h)[...,0]
+        delta=nn.Dense(8)(h)
+        next_obs=obs+delta
+        return next_obs,nn.Dense(1)(h)[...,0]
 
 class WorldModel:
     def __init__(self,seed=0,latent_dim=32,lr=3e-4):

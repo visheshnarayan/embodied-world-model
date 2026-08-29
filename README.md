@@ -99,7 +99,7 @@ For `panda-stack-wide`, the task-aware benchmark now defines success as box 0 be
 
 The benchmark logs task success, mean and standard-deviation return, final cube-target distance, episode length, contact rate, environment seed, training updates, and held-out one-step model MSE. The most useful first figure is success rate and final distance for world-model MPC versus random across seeds. Pass several `--train-steps` values (for example 0, 250, 1000, 5000) in one run to create a sample-efficiency table.
 
-The first generated run is stored under `artifacts/`: 2 seeds, 5 evaluation episodes, and 0/50 model updates. It currently shows 0% sparse success for both methods, but world-model MPC improves mean return and final distance. Treat this as a validated baseline and debugging checkpoint, not as evidence of superiority.
+The initial small run is retained as a debugging checkpoint. The current reproducible candidate benchmark uses 1,000 random replay episodes, 10,000 JAX updates, 128 CEM candidates, horizon 8, 50 evaluation episodes, and five seeds. It measured 0.0% random success, 100.0% scripted-reference success, and 25.6% ± 24.4% world-model MPC success. The per-seed MPC success rates were 0%, 54%, 0%, 38%, and 36%; the next benchmark should reduce this variance with more data and seeds.
 
 ## Long-horizon task-aware result
 
