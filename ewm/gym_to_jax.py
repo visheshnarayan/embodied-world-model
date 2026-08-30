@@ -786,6 +786,62 @@ def _transform_step_body(func_body, state_fields: list[str], env_instance):
     return body_module.body
 
 
+# ── Obs builder for separate-fields path ─────────────────────────────────────
+
+def _build_sep_obs_fn(env_class, env_instance, state_fields: list[str], obs_dim: int,
+                      extra_ns: dict) -> Any | None:
+    """
+    Build a JAX obs function for the separate-fields path.
+
+    If the env defines _get_obs(), transform it into a callable
+    ``_obs_fn(field0, field1, ...)`` where each argument is a state field.
+    Returns None if _get_obs() cannot be transformed.
+    """
+    if not hasattr(env_class, "_get_obs"):
+        return None
+
+    raw_src = _get_method_src(env_class, "_get_obs")
+    tree    = ast.parse(raw_src)
+    func    = tree.body[0]
+
+    body_module = copy.deepcopy(ast.Module(body=func.body, type_ignores=[]))
+    for cls in [_NpToJnp, _MathToJnp, _RemovePyCasts]:
+        body_module = cls().visit(body_module)
+    body_module = _SelfFieldToLocal(state_fields).visit(body_module)
+    body_module = _SelfAttrToConst(env_instance).visit(body_module)
+    body_module = _RemoveSelfAssigns().visit(body_module)
+    ast.fix_missing_locations(body_module)
+
+    body_stmts, return_stmt = [], None
+    for stmt in body_module.body:
+        if stmt is None:
+            continue
+        if isinstance(stmt, ast.Return):
+            return_stmt = stmt
+        else:
+            body_stmts.append(stmt)
+
+    body_src = "\n".join(_indent_stmt(s) for s in body_stmts)
+    ret_expr = f"jnp.zeros({obs_dim}, jnp.float32)"
+    if return_stmt is not None:
+        ret_expr = ast.unparse(return_stmt.value)
+
+    args_str = ", ".join(state_fields)
+    fn_code  = (
+        f"def _obs_fn({args_str}):\n"
+        + (f"{body_src}\n" if body_src else "")
+        + f"    return jnp.asarray({ret_expr}, jnp.float32)\n"
+    )
+
+    ns = {"jax": jax, "jnp": jnp, "np": np, "obs_dim": obs_dim}
+    ns.update(extra_ns)
+    try:
+        exec(compile(fn_code, "<gym_to_jax:sep_obs>", "exec"), ns)
+    except Exception:
+        return None
+    return ns["_obs_fn"]
+
+
 # ── Reset builder (separate-fields path: NavEnv) ──────────────────────────────
 
 def _build_reset(env_class, StateType, state_fields: list[str], obs_dim: int, env_instance):
@@ -830,12 +886,21 @@ def _build_reset(env_class, StateType, state_fields: list[str], obs_dim: int, en
     # State construction
     construct = ", ".join(f"{f}={f}" for f in state_fields)
 
+    extra_ns = dict(_get_module_constants(env_instance.__class__))
+    extra_ns.update(_get_module_functions(env_instance.__class__))
+
+    obs_fn = _build_sep_obs_fn(env_instance.__class__, env_instance, state_fields, obs_dim, extra_ns)
+    if obs_fn is not None:
+        obs_line = "    _obs = _obs_fn(" + ", ".join(f"{f}={f}" for f in state_fields) + ")"
+    else:
+        obs_line = f"    _obs = jnp.concatenate([{obs_concat}])[:obs_dim]"
+
     fn_code = f"""def _reset_fn(key):
 {key_split_line}
 {key_assign_lines}
 {body_src}
     _state = StateType({construct})
-    _obs = jnp.concatenate([{obs_concat}])[:obs_dim]
+{obs_line}
     return _state, _obs
 """
 
@@ -843,6 +908,9 @@ def _build_reset(env_class, StateType, state_fields: list[str], obs_dim: int, en
         "jax": jax, "jnp": jnp, "np": np,
         "StateType": StateType, "obs_dim": obs_dim,
     }
+    namespace.update(extra_ns)
+    if obs_fn is not None:
+        namespace["_obs_fn"] = obs_fn
     try:
         exec(compile(fn_code, "<gym_to_jax:reset>", "exec"), namespace)
     except Exception as e:
@@ -911,13 +979,29 @@ def _build_step(env_class, StateType, state_fields: list[str], max_steps: int,
             construct_parts.append(f"{f}={f}")
     construct = ", ".join(construct_parts)
 
+    extra_ns = dict(_get_module_constants(env_instance.__class__))
+    extra_ns.update(_get_module_functions(env_instance.__class__))
+
+    obs_fn = _build_sep_obs_fn(env_instance.__class__, env_instance, state_fields, obs_dim, extra_ns)
+
+    # Build state field names for the new state (steps handled separately)
+    new_state_fields = [f for f in state_fields if f != "steps"]
+    if obs_fn is not None:
+        obs_call_args = ", ".join(
+            f"{f}={f}" if f != "steps" else f"steps=_steps"
+            for f in state_fields
+        )
+        obs_line = f"    _obs = _obs_fn({obs_call_args})"
+    else:
+        obs_line = f"    _obs = jnp.concatenate([{obs_concat}])[:obs_dim]"
+
     fn_code = f"""def _step_fn(state, action):
 {unpack_lines}
 {body_src}
     _steps = state.steps + jnp.int32(1)
     _done = ({success_var}) | (_steps >= {max_steps})
     _new_state = StateType({construct})
-    _obs = jnp.concatenate([{obs_concat}])[:obs_dim]
+{obs_line}
     return _new_state, _obs, jnp.float32({reward_var}), _done
 """
 
@@ -925,6 +1009,9 @@ def _build_step(env_class, StateType, state_fields: list[str], max_steps: int,
         "jax": jax, "jnp": jnp, "np": np,
         "StateType": StateType, "obs_dim": obs_dim,
     }
+    namespace.update(extra_ns)
+    if obs_fn is not None:
+        namespace["_obs_fn"] = obs_fn
     try:
         exec(compile(fn_code, "<gym_to_jax:step>", "exec"), namespace)
     except Exception as e:
@@ -1099,6 +1186,8 @@ def _get_module_constants(env_class) -> dict[str, Any]:
         if isinstance(val, (int, float, bool, str)):
             result[name] = val
         elif isinstance(val, np.ndarray):
+            result[name] = val
+        elif isinstance(val, np.generic):   # np.float32, np.int32, etc.
             result[name] = val
     return result
 

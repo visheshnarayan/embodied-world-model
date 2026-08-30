@@ -133,18 +133,17 @@ class MicroduckWalkEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        rng = self.np_random
 
         # Base position: nominal height + small xy perturbation
         self.base_pos = np.array([
-            rng.uniform(-0.05, 0.05),
-            rng.uniform(-0.05, 0.05),
+            self.np_random.uniform(-0.05, 0.05),
+            self.np_random.uniform(-0.05, 0.05),
             float(GROUND_Z),
         ], np.float32)
 
         # Slight random initial tilt (roll / pitch only)
-        roll  = rng.uniform(-0.05, 0.05)
-        pitch = rng.uniform(-0.05, 0.05)
+        roll  = self.np_random.uniform(-0.05, 0.05)
+        pitch = self.np_random.uniform(-0.05, 0.05)
         cr = np.cos(roll  / 2.0)
         sr = np.sin(roll  / 2.0)
         cp = np.cos(pitch / 2.0)
@@ -161,18 +160,18 @@ class MicroduckWalkEnv(gym.Env):
         self.base_ang_vel = np.zeros(3, np.float32)
 
         # Joints near default pose with small noise
-        self.joint_pos   = rng.uniform(-0.05, 0.05, NUM_JOINTS).astype(np.float32)
+        self.joint_pos   = self.np_random.uniform(-0.05, 0.05, NUM_JOINTS).astype(np.float32)
         self.joint_vel   = np.zeros(NUM_JOINTS, np.float32)
         self.last_action = np.zeros(NUM_JOINTS, np.float32)
 
         # Random velocity command
         self.cmd_vel  = np.array([
-            rng.uniform(-0.4,  0.4),
-            rng.uniform(-0.3,  0.3),
-            rng.uniform(-1.0,  1.0),
+            self.np_random.uniform(-0.4,  0.4),
+            self.np_random.uniform(-0.3,  0.3),
+            self.np_random.uniform(-1.0,  1.0),
         ], np.float32)
-        self.cmd_head = rng.uniform(-0.2, 0.2, 4).astype(np.float32)
-        self.cmd_body = rng.uniform(-0.1, 0.1, 6).astype(np.float32)
+        self.cmd_head = self.np_random.uniform(-0.2, 0.2, 4).astype(np.float32)
+        self.cmd_body = self.np_random.uniform(-0.1, 0.1, 6).astype(np.float32)
 
         self.steps = 0
         return self._get_obs(), {}
