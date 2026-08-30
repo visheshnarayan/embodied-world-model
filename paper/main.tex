@@ -273,7 +273,89 @@ overhead once per timestep that outweighs the SIMD benefit at small $N$.
 The scan (Tier~4) resolves this by fusing all $H \times N$ transitions into
 one kernel call.
 
-%% ── 6. Robotics Connection ───────────────────────────────────────────────────
+%% ── 6. compile_ppo Framework ─────────────────────────────────────────────────
+\section{The \texttt{compile\_ppo} Framework}
+
+Tier~4 achieves 17\texttimes{} speedup, but requires manually rewriting
+every loop in JAX. We automate this with \texttt{ewm/jax\_convert.py},
+a lightweight compilation framework that takes two pure-JAX functions and
+returns a fully compiled PPO trainer with no for-loops exposed to the caller.
+
+\subsection{Interface}
+
+The user provides two pure functions:
+\begin{itemize}
+  \item \texttt{reset\_fn(key) $\to$ (state, obs)}
+  \item \texttt{step\_fn(state, action) $\to$ (state, obs, reward, done)}
+\end{itemize}
+and a Flax policy module.
+\texttt{compile\_ppo} returns a \texttt{PPOTrainer} whose \texttt{.train()}
+method runs the full loop:
+
+\begin{footnotesize}\begin{verbatim}
+trainer = compile_ppo(
+    reset_fn   = jax_env.reset_with_obs,
+    step_fn    = jax_env.step_with_obs,
+    net        = ActorCritic(),
+    obs_dim    = 8,
+    action_dim = 2,
+)
+result = trainer.train(
+    PPOConfig(num_envs=16, updates=300)
+)
+\end{verbatim}\end{footnotesize}
+
+No \texttt{jax.vmap}, \texttt{lax.scan}, PRNG key threading, or carry-state
+management is written by the caller.
+
+\subsection{What the framework compiles}
+
+\textbf{Kernel 1 — rollout collection.}
+\texttt{compile\_ppo} wraps \texttt{step\_fn} with \texttt{jax.vmap} over $N$
+environments and embeds it inside a \texttt{jax.lax.scan} body of length $H$.
+Auto-reset on episode termination is handled via \texttt{jnp.where} inside the
+scan body, keeping all control flow in XLA.
+
+\textbf{Kernel 2 — GAE.}
+\texttt{jax.lax.scan(..., reverse=True)} computes generalised advantage
+estimates in one backward pass.
+
+\textbf{Kernel 3 — minibatch update.}
+Per epoch, a random permutation shuffles the flattened $H \times N$ buffer;
+\texttt{lax.scan} over the minibatch stack applies gradient updates without
+Python dispatch.
+
+All three kernels are JIT-compiled once and reused across all \texttt{updates}
+iterations.
+
+\subsection{Framework results}
+
+Table~\ref{tab:framework} shows wall-clock time for the same 16-env,
+300-update config used throughout. The framework matches hand-written Tier~4
+performance and achieves a \textbf{22\texttimes{}} end-to-end speedup over
+the Python baseline.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Framework vs.\ manual implementations (16 envs, 300 updates, H=128).}
+\label{tab:framework}
+\begin{tabular}{lrrc}
+\toprule
+Method & Time (s) & Ksteps/s & Speedup \\
+\midrule
+Tier~2 (Python)     & 113.0 &    5 & 1.0\texttimes{} \\
+Tier~4 (manual)     &   6.7 &   92 & 16.9\texttimes{} \\
+\texttt{compile\_ppo} & \textbf{5.2} & \textbf{119} & \textbf{21.7\texttimes{}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The framework is 1.3\texttimes{} faster than hand-written Tier~4 because the
+compilation path eliminates the per-epoch Python call overhead; both
+implementations converge to 100\% success across all seeds.
+
+%% ── 7. Robotics Connection ───────────────────────────────────────────────────
 \section{Robotics Connection}
 
 Figure~\ref{fig:rollout} shows a Franka Panda cube-stacking rollout from our
@@ -292,11 +374,13 @@ natural next step for scaling to physically realistic manipulation.
 
 Replacing the three Python loops in PPO with \texttt{jax.vmap} and
 \texttt{jax.lax.scan} compiles the full training loop into XLA and yields a
-17\texttimes{} end-to-end speedup with no quality loss. Throughput scales
-with environment count rather than saturating, and the same code runs on GPU
-where the gap is expected to widen to 100\texttimes{}+. The pure-JAX
-environment and scan-based PPO implementation are available in the
-accompanying repository.
+17\texttimes{} end-to-end speedup with no quality loss. We further show
+that this compilation can be automated: \texttt{compile\_ppo} takes any two
+pure-JAX env functions and returns a fully compiled trainer, achieving a
+22\texttimes{} speedup without the caller writing a single \texttt{scan} or
+\texttt{vmap}. Throughput scales with environment count rather than
+saturating, and the same code runs on GPU where the gap is expected to widen
+to 100\texttimes{}+.
 
 %% ── References ───────────────────────────────────────────────────────────────
 \begin{thebibliography}{9}

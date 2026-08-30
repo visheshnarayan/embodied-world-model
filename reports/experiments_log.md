@@ -6,6 +6,26 @@ Append-only log of all runs. Most recent at top.
 
 ## 2026-08-30
 
+### [framework-16env] compile_ppo framework — 16 envs, 2 seeds
+**Script:** `train_ppo_compiled.py`
+**Config:** 16 envs, 300 updates, horizon 128, minibatch 256, 50 eval episodes
+**Total env steps per seed:** 614,400
+
+| Seed | Wall time | Steps/s | Success |
+|---|---|---|---|
+| 1 | 5.29 s | 116,155 | 100% |
+| 2 | 5.08 s | 120,941 | 100% |
+
+**Clean mean (seeds 1–2): 5.2 s, 118,500 steps/s**
+**Speedup vs Tier 2 (same config): ~22×**
+**Speedup vs hand-written Tier 4: ~1.3×**
+
+Framework auto-compiles vmap, lax.scan rollout, reverse-scan GAE, and scanned
+minibatch updates from two pure-JAX functions (reset_with_obs, step_with_obs).
+No for-loops written by caller.
+
+---
+
 ### [T2-convergence] Tier 2 convergence timing — 3 seeds
 **Script:** `train_ppo.py`
 **Config:** 16 envs, 300 updates, horizon 128, 50 eval episodes

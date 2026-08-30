@@ -119,3 +119,17 @@ def step(
         steps=new_steps,
     )
     return next_state, reward, done, success
+
+
+def reset_with_obs(key: jax.Array) -> tuple[EnvState, jax.Array]:
+    """Wrapper satisfying the compile_ppo interface: key → (state, obs)."""
+    state = reset(key)
+    return state, get_obs(state)
+
+
+def step_with_obs(
+    state: EnvState, action: jax.Array
+) -> tuple[EnvState, jax.Array, jax.Array, jax.Array]:
+    """Wrapper satisfying the compile_ppo interface: (state, action) → (state, obs, reward, done)."""
+    next_state, reward, done, _ = step(state, action)
+    return next_state, get_obs(next_state), reward, done
