@@ -1,6 +1,6 @@
 # RL → XLA: Automatic Compilation of Gymnasium RL Environments to JAX Kernels
 
-![Workflow](assets/plots/workflow_v4.png)
+![Workflow](assets/plots/workflow_v5.png)
 
 <div align="center">
   <img src="assets/isaaclab/panda_stack_rollout_01.png" width="32%" />
@@ -28,7 +28,6 @@ pip install rl2xla
 ```
 
 ```python
-import gymnasium as gym
 from flax import linen as nn
 from rl2xla import gym_to_jax, compile_ppo, PPOConfig
 import jax.numpy as jnp
@@ -45,24 +44,17 @@ class ActorCritic(nn.Module):
         value   = nn.Dense(1)(x)[..., 0]
         return mean, jnp.broadcast_to(log_std, mean.shape), value
 
-# 2. Point it at any Gymnasium env
-env = gym.make("MountainCarContinuous-v0").unwrapped
-obs_dim    = env.observation_space.shape[0]   # 2
-action_dim = env.action_space.shape[0]        # 1
+# 2. Convert any Gymnasium env by name
+reset_fn, step_fn = gym_to_jax("MountainCarContinuous-v0")
 
-reset_fn, step_fn = gym_to_jax(env.__class__)
-
-# 3. Compile and train
-trainer = compile_ppo(reset_fn, step_fn,
-                      ActorCritic(action_dim=action_dim),
-                      obs_dim=obs_dim,
-                      action_dim=action_dim)
+# 3. Compile and train — obs_dim / action_dim inferred automatically
+trainer = compile_ppo(reset_fn, step_fn, ActorCritic(action_dim=1))
 
 result = trainer.train(PPOConfig(num_envs=256, updates=300), seed=0)
 print(f"{result['wall_time_s']:.1f}s  —  {result['steps_per_second']:,} steps/s")
 ```
 
-Works out of the box with **CartPole-v1**, **MountainCar-v0**, **MountainCarContinuous-v0**, **Pendulum-v1**, and any custom env with pure Python + NumPy logic.
+Works out of the box with **CartPole-v1**, **MountainCar-v0**, **MountainCarContinuous-v0**, **Pendulum-v1**, **MicroduckWalkEnv** (14-DOF bipedal, 61-dim obs), and any custom env with pure Python + NumPy logic.
 
 ---
 
@@ -255,6 +247,7 @@ ewm/
   jax_convert.py      compile_ppo — 3 compiled XLA kernels + PPOConfig
   gym_to_jax.py       gym_to_jax — 9 AST transformers, state probing, AutoEnvState
   test_env.py         NavEnv — 2D navigation env (exercises general AST path)
+  microduck_env.py    MicroduckWalkEnv — 14-DOF bipedal env, 61-dim obs, 14-dim action
   world_model.py      Flax/Optax action-conditioned dynamics model
   planner.py          CEM planning over imagined rollouts
 
@@ -282,5 +275,6 @@ paper/
 - [ ] Reproduce Tier 2→4 speedup on GPU (expected 100×+ gap)
 - [ ] Tier 5: scan over updates for a fully compiled outer loop
 - [ ] Extend `gym_to_jax` to handle `elif` chains and while loops
+- [ ] Train on `MicroduckWalkEnv` and benchmark against microduck_rl (PyTorch/MuJoCo Warp baseline)
 - [ ] Connect learned controller to Isaac Lab Panda task
 - [ ] Pixel observations + language-conditioned commands

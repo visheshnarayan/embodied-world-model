@@ -63,8 +63,8 @@ def compile_ppo(
     reset_fn:   Callable,
     step_fn:    Callable,
     net:        nn.Module,
-    obs_dim:    int,
-    action_dim: int,
+    obs_dim:    int | None = None,
+    action_dim: int | None = None,
 ) -> "PPOTrainer":
     """
     Compile a fully JAX-accelerated PPO trainer from two pure functions.
@@ -74,9 +74,19 @@ def compile_ppo(
     reset_fn   : key → (state, obs)
     step_fn    : (state, action) → (state, obs, reward, done)
     net        : Flax module  obs → (mean, log_std, value)
-    obs_dim    : dimensionality of obs
-    action_dim : dimensionality of action
+    obs_dim    : dimensionality of obs  (inferred from reset_fn if omitted)
+    action_dim : dimensionality of action  (inferred from net if omitted)
     """
+    if obs_dim is None:
+        _, obs = reset_fn(jax.random.PRNGKey(0))
+        obs_dim = int(jnp.asarray(obs).shape[0])
+
+    if action_dim is None:
+        dummy_obs    = jnp.zeros((1, obs_dim), jnp.float32)
+        dummy_params = net.init(jax.random.PRNGKey(0), dummy_obs)
+        mean, _, _   = net.apply(dummy_params, dummy_obs)
+        action_dim   = int(jnp.asarray(mean).shape[-1])
+
     return PPOTrainer(reset_fn, step_fn, net, obs_dim, action_dim)
 
 

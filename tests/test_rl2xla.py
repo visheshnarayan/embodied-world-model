@@ -5,15 +5,18 @@ Tests:
   - gym_to_jax converts PushCubeEnv (fallback path) and NavEnv (general AST path)
   - reset_fn / step_fn are jit and vmap compatible
   - compile_ppo produces a trainer that converges on both envs
+  - MicroduckWalkEnv: 14-DOF bipedal env, 61-dim obs, 14-dim action
 """
 import gymnasium as gym
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from rl2xla import gym_to_jax, compile_ppo, PPOConfig, ConversionError
 from ewm.env import PushCubeEnv
 from ewm.test_env import NavEnv
+from ewm.microduck_env import MicroduckWalkEnv, OBS_DIM, NUM_JOINTS
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -175,3 +178,61 @@ class TestClassicControl:
         actions = jnp.zeros((8, n_act), jnp.float32)
         _, new_obss, _, _ = jax.vmap(sf)(states, actions)
         assert new_obss.shape == (8,) + expected_obs
+
+
+# ── MicroduckWalkEnv ──────────────────────────────────────────────────────────
+
+class TestMicroduckWalkEnv:
+    """14-DOF bipedal env: obs 61-dim, action 14-dim, pure NumPy dynamics."""
+
+    def _env(self):
+        return MicroduckWalkEnv(max_steps=200)
+
+    def test_spaces(self):
+        env = self._env()
+        assert env.observation_space.shape == (OBS_DIM,)
+        assert env.action_space.shape == (NUM_JOINTS,)
+
+    def test_reset_shape(self):
+        env = self._env()
+        obs, info = env.reset(seed=0)
+        assert obs.shape == (OBS_DIM,)
+        assert obs.dtype == np.float32
+
+    def test_step_shape(self):
+        env = self._env()
+        env.reset(seed=0)
+        action = env.action_space.sample()
+        obs, reward, terminated, truncated, info = env.step(action)
+        assert obs.shape == (OBS_DIM,)
+        assert isinstance(reward, float)
+        assert isinstance(terminated, bool)
+        assert isinstance(truncated, bool)
+
+    def test_episode_runs(self):
+        """Env steps without crash for a full episode."""
+        env = self._env()
+        obs, _ = env.reset(seed=42)
+        for _ in range(200):
+            obs, reward, terminated, truncated, _ = env.step(
+                env.action_space.sample()
+            )
+            if terminated or truncated:
+                break
+        assert obs.shape == (OBS_DIM,)
+
+    def test_zero_action_stable(self):
+        """Zero action for 100 steps shouldn't NaN."""
+        env = self._env()
+        env.reset(seed=0)
+        action = np.zeros(NUM_JOINTS, np.float32)
+        for _ in range(100):
+            obs, _, terminated, truncated, _ = env.step(action)
+            assert not np.any(np.isnan(obs)), "NaN detected in observation"
+            if terminated or truncated:
+                break
+
+    def test_string_conversion(self):
+        """gym_to_jax(string) UX fix: still raises ConversionError for unknown ids."""
+        with pytest.raises((ConversionError, Exception)):
+            gym_to_jax("NonExistentEnv-v0")

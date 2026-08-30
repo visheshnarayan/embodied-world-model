@@ -1440,14 +1440,16 @@ def _general_packed_state_path(env_class, env_instance, obs_dim: int, max_steps:
 
 # ── Main converter ────────────────────────────────────────────────────────────
 
-def gym_to_jax(env_class: Type[gym.Env]):
+def gym_to_jax(env_class):
     """
     Convert a pure-NumPy Gymnasium env to (reset_fn, step_fn).
 
     Parameters
     ----------
-    env_class : Type[gym.Env]
-        Must use only NumPy (no C++ extension backends).
+    env_class : Type[gym.Env] or str
+        A Gymnasium env class, or a registered env id string
+        (e.g. ``"CartPole-v1"``).  Must use only NumPy (no C++ extension
+        backends).
 
     Returns
     -------
@@ -1459,6 +1461,14 @@ def gym_to_jax(env_class: Type[gym.Env]):
     ConversionError
         If the env uses a C++ backend or unsupported patterns.
     """
+    if isinstance(env_class, str):
+        try:
+            env_class = gym.make(env_class).unwrapped.__class__
+        except Exception as e:
+            raise ConversionError(
+                f"Could not instantiate Gymnasium env '{env_class}': {e}"
+            ) from e
+
     if _has_cpp_backend(env_class):
         raise ConversionError(
             f"{env_class.__name__} appears to use a C++ backend. "
