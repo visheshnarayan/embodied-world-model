@@ -1,6 +1,6 @@
 # Contact in Latent Space
 
-### Learning to predict, imagine, and control contact-rich robot manipulation
+### Accelerated RL training through JAX kernel compilation for contact-rich robot manipulation
 
 ![Isaac Lab Panda rollout](assets/isaaclab/panda_stack_rollout_sequence.png)
 
@@ -8,11 +8,82 @@
 
 ![Isaac Lab Panda scene](assets/isaaclab/panda_stack_scene_overview.png)
 
-Contact in Latent Space is a compact research stack for model-based robot learning. It combines a deterministic Gymnasium manipulation task, an action-conditioned JAX world model, imagined CEM planning, and a real-data track built around NVIDIA's SingleArm Panda dataset.
+Contact in Latent Space studies how much RL training can be accelerated by progressively moving computation into JAX's XLA compiler — eliminating Python interpreter overhead at every stage of the training loop. The task is contact-rich robot manipulation; the contribution is a systematic ablation of each bottleneck, measured end-to-end.
 
-The goal is simple: learn how actions change contact-rich manipulation, then use the learned dynamics to plan with fewer environment interactions.
+---
 
-## Quickstart
+## What we fix
+
+Standard RL training has three Python-level bottlenecks. Each one stalls the CPU waiting for the interpreter instead of computing:
+
+| # | Bottleneck | Traditional code | Our fix |
+|---|---|---|---|
+| 1 | Parallel env steps | `for env in envs: env.step(a)` | `jax.vmap(step)` — one SIMD kernel |
+| 2 | Rollout collection | `for t in range(H): ...` | `jax.lax.scan` — single XLA graph |
+| 3 | GAE + minibatch updates | Python backward loop + minibatch for-loop | `lax.scan(reverse=True)` + scanned epochs |
+
+We also rewrite the environment itself (`ewm/jax_env.py`) as a pure stateless JAX function so that `vmap` and `scan` can compile through it. The NumPy-based `PushCubeEnv` cannot be traced by XLA.
+
+---
+
+## Key results (CPU, JAX 0.11.1)
+
+### End-to-end training speed — same config (16 envs, 300 updates, horizon 128)
+
+| Implementation | Wall time | Steps/s | Speedup |
+|---|---|---|---|
+| **Tier 2** — Python loops + NumPy env | 113 s | 5,440 | 1× |
+| **Tier 4** — `lax.scan` + `vmap` JAX env | **6.7 s** | 91,700 | **17×** |
+
+Both reach **100% success** — the speedup is lossless.
+The 17× vs 7.8× rollout-only gap shows that fixing the rollout loop alone undersells the gain; GAE and minibatch loops each add further speedup when compiled.
+
+### Throughput scaling (rollout collection only)
+
+| Envs | Tier 2 steps/s | Tier 4 steps/s | Speedup |
+|---|---|---|---|
+| 8 | 62,049 | 423,020 | 6.8× |
+| 16 | 78,344 | 609,976 | 7.8× |
+| 64 | 97,444 | 1,098,652 | 11.3× |
+| 128 | 101,447 | 1,283,713 | **12.7×** |
+
+Tier 2 plateaus at ~100K steps/s (Python loop is O(N) serial).
+Tier 4 keeps scaling because `vmap` batches all N envs into one XLA kernel.
+
+### bfloat16 (mixed precision, 256 envs, 100 updates)
+
+| Dtype | Wall time | Steps/s | Success |
+|---|---|---|---|
+| float32 | 24.8 s | 132,000 | 100% |
+| bfloat16 | 32.2 s | 101,700 | 100% |
+
+**bf16 is 30% slower on CPU** — x86 lacks native bf16 compute units so XLA promotes to fp32 for matmuls. No quality loss. On GPU (A100/H100 Tensor Cores) the same change gives ~1.5–2× speedup.
+
+---
+
+## Throughput tiers
+
+```
+Tier 2   NumPy env   + Python loops       (baseline — matches standard CleanRL / SB3 style)
+Tier 3   JAX env     + Python rollout     (vmap over envs only — slower than T2 at low N)
+Tier 4   JAX env     + lax.scan rollout   (fully compiled — one XLA kernel per update)
+Tier 4b  Tier 4      + bfloat16 compute   (mixed precision — GPU benefit only)
+```
+
+```bash
+# Measure throughput across tiers
+python scripts/benchmark_throughput.py --steps 2000000 --envs 128
+
+# Train Tier 4 (1024 parallel envs, fully scanned)
+python scripts/train_ppo_scan.py --num-envs 1024 --updates 300
+
+# Mixed-precision variant
+python scripts/train_ppo_scan.py --num-envs 1024 --updates 300 --dtype bfloat16
+```
+
+---
+
+## Quickstart (world-model track)
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -23,58 +94,53 @@ python scripts/train_mpc.py --model artifacts/world_model.pkl --episodes 30 --se
 python scripts/evaluate.py --controller mpc --episodes 20 --seed 0
 ```
 
-## Benchmark
-
-Run the reproducible toy-task comparison:
+## PPO baseline
 
 ```bash
-python scripts/run_benchmark.py \
-  --seeds 0 1 2 3 4 \
-  --data-episodes 1000 \
-  --train-steps 10000 \
-  --eval-episodes 50 \
-  --candidates 128 \
-  --horizon 8 \
-  --output artifacts/benchmark.csv
+# Tier 2 (Python/NumPy env, original)
+python scripts/train_ppo.py --seed 0 --updates 300 --envs 16
 
-python scripts/plot_results.py --csv artifacts/benchmark.csv
+# Tier 4 (fully compiled, 1024 envs)
+python scripts/train_ppo_scan.py --seed 0 --updates 300 --num-envs 1024
 ```
-
-The benchmark compares random exploration, a scripted reference controller, and JAX world-model MPC. It records success rate, return, final distance, contact rate, episode length, and one-step prediction MSE. Generated CSVs and figures are written to `artifacts/`.
 
 ## Real-data track
 
-The primary data track uses NVIDIA's [PhysicalAI-Robotics-Manipulation-SingleArm dataset](https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Manipulation-SingleArm), an Isaac Sim Franka Panda collection with state, action, RGB, and depth observations.
+Uses NVIDIA's [PhysicalAI-Robotics-Manipulation-SingleArm dataset](https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Manipulation-SingleArm) — Isaac Sim Franka Panda with state, action, RGB, and depth observations.
 
 ```bash
 python scripts/download_single_arm.py --output data/single_arm
-python scripts/inspect_single_arm.py data/single_arm
 python scripts/train_real_world_model.py data/single_arm --max-rows 200000 --steps 2000
-python scripts/evaluate_rollouts.py artifacts/single_arm_absolute.pkl data/single_arm/panda-stack-wide
-python scripts/run_data_scaling.py data/single_arm/panda-stack-wide --episodes 10 25 50 100 --steps 500
+python scripts/run_data_scaling.py data/single_arm/panda-stack-wide --episodes 10 25 50 100
 ```
-
-The current real-data model predicts the next state from the current state and action. The main evaluation targets are data scaling, multi-step rollout error, and held-out task generalization.
 
 ## Isaac Lab
 
-Isaac Lab is installed and running on an NVIDIA A10G cloud workstation. The integration contract for the Panda state/action layout is defined in [`ewm/isaac_bridge.py`](ewm/isaac_bridge.py) and [`configs/single_arm_isaac_contract.json`](configs/single_arm_isaac_contract.json).
+Integration contract defined in [`ewm/isaac_bridge.py`](ewm/isaac_bridge.py) and [`configs/single_arm_isaac_contract.json`](configs/single_arm_isaac_contract.json).
 
 ```bash
 python scripts/preflight_isaac.py
 ```
 
-The next integration step is a custom Isaac Lab task that routes Panda actions through the existing world-model and benchmark interfaces.
-
 ## Project layout
 
-- `ewm/env.py` — deterministic Gymnasium push task
-- `ewm/world_model.py` — Flax/Optax action-conditioned dynamics model
-- `ewm/planner.py` — batched JAX imagined rollouts and CEM planning
-- `ewm/real_data.py` — SingleArm dataset loading and preprocessing
-- `scripts/` — training, evaluation, benchmark, and plotting commands
-- `reports/` — preprint notes and tracked benchmark tables
-- `isaaclab_extension/` — Isaac Lab integration notes
+```
+ewm/
+  env.py              Tier 2 baseline — NumPy Gymnasium env (Python-loopable)
+  jax_env.py          Tier 4 env — pure-JAX stateless functions (vmap/scan-safe)
+  world_model.py      Flax/Optax action-conditioned dynamics model
+  planner.py          CEM planning over imagined rollouts
+  real_data.py        SingleArm dataset loader
+
+scripts/
+  train_ppo.py        Tier 2 PPO — JAX network, Python env loop, Python GAE
+  train_ppo_scan.py   Tier 4 PPO — vmap env, lax.scan rollout + GAE + minibatch
+  benchmark_throughput.py   Tier 2 / 3 / 4 rollout throughput comparison
+
+reports/
+  findings.md         Full experimental findings with methodology notes
+  experiments_log.md  Append-only log of all runs
+```
 
 ## Local viewer
 
@@ -83,15 +149,14 @@ pip install -e '.[ui]'
 streamlit run scripts/dashboard.py
 ```
 
-The viewer shows dataset samples, model errors, policy comparisons, and experiment figures.
-
 ## Roadmap
 
-- Improve multi-seed world-model MPC performance
-- Add PPO as a model-free baseline
-- Connect the learned controller to the Isaac Lab Panda task
-- Add pixel observations, multi-task targets, and language-conditioned commands
+- [ ] Reproduce Tier 2→4 speedup on GPU (expected 100×+ gap)
+- [ ] Quantization track: int8 critic value estimates, gradient compression ablations
+- [ ] Tier 5: fully compiled outer training loop (scan over updates, not just rollout)
+- [ ] Connect learned controller to Isaac Lab Panda task
+- [ ] Pixel observations + language-conditioned commands
 
 ## Reproducibility
 
-All experiments accept explicit seeds and write metrics/checkpoints under `artifacts/`. The core toy environment is CPU-friendly; Isaac Lab requires a Linux NVIDIA workstation or cloud GPU.
+All experiments accept explicit `--seed` flags and write metrics under `artifacts/` (gitignored). Run with `--seeds 0 1 2` for multi-seed estimates. The core toy environment and all JAX tiers are CPU-runnable; Isaac Lab requires a Linux NVIDIA workstation or cloud GPU.

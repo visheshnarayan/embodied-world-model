@@ -1,3 +1,4 @@
 from .env import PushCubeEnv
-__all__ = ["PushCubeEnv"]
+from . import jax_env
+__all__ = ["PushCubeEnv", "jax_env"]
 
