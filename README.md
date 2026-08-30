@@ -3,7 +3,12 @@
 **Accelerating robot RL through JAX kernel compilation**
 
 <div align="center">
-  <img src="assets/isaaclab/panda_stack_rollout_sequence.png" width="80%" />
+  <img src="assets/isaaclab/panda_stack_rollout_01.png" width="32%" />
+  <img src="assets/isaaclab/panda_stack_rollout_02.png" width="32%" />
+  <img src="assets/isaaclab/panda_stack_rollout_03.png" width="32%" />
+</div>
+<div align="center">
+  <img src="assets/isaaclab/panda_stack_rollout_sequence.png" width="98%" />
 </div>
 
 <br>
