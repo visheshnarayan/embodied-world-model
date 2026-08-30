@@ -1,0 +1,136 @@
+"""
+pytest tests for the rl2xla public API.
+
+Tests:
+  - gym_to_jax converts PushCubeEnv (fallback path) and NavEnv (general AST path)
+  - reset_fn / step_fn are jit and vmap compatible
+  - compile_ppo produces a trainer that converges on both envs
+"""
+import jax
+import jax.numpy as jnp
+import pytest
+
+from rl2xla import gym_to_jax, compile_ppo, PPOConfig, ConversionError
+from ewm.env import PushCubeEnv
+from ewm.test_env import NavEnv
+
+
+# ── Fixtures ──────────────────────────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def pushcube_fns():
+    return gym_to_jax(PushCubeEnv)
+
+
+@pytest.fixture(scope="module")
+def nav_fns():
+    return gym_to_jax(NavEnv)
+
+
+# ── gym_to_jax: PushCubeEnv ──────────────────────────────────────────────────
+
+class TestGymToJaxPushCube:
+    def test_converts(self, pushcube_fns):
+        reset_fn, step_fn = pushcube_fns
+        assert callable(reset_fn) and callable(step_fn)
+
+    def test_reset_shape(self, pushcube_fns):
+        reset_fn, _ = pushcube_fns
+        key = jax.random.PRNGKey(0)
+        state, obs = reset_fn(key)
+        assert obs.shape == (PushCubeEnv().observation_space.shape[0],)
+
+    def test_step(self, pushcube_fns):
+        reset_fn, step_fn = pushcube_fns
+        key = jax.random.PRNGKey(1)
+        state, obs = reset_fn(key)
+        action = jnp.zeros(PushCubeEnv().action_space.shape, jnp.float32)
+        new_state, new_obs, reward, done = step_fn(state, action)
+        assert new_obs.shape == obs.shape
+        assert reward.shape == ()
+        assert done.shape == ()
+
+    def test_jit(self, pushcube_fns):
+        reset_fn, step_fn = pushcube_fns
+        key = jax.random.PRNGKey(2)
+        state, obs = jax.jit(reset_fn)(key)
+        action = jnp.zeros(PushCubeEnv().action_space.shape, jnp.float32)
+        jax.jit(step_fn)(state, action)
+
+    def test_vmap(self, pushcube_fns):
+        reset_fn, step_fn = pushcube_fns
+        keys = jax.random.split(jax.random.PRNGKey(3), 8)
+        states, obss = jax.vmap(reset_fn)(keys)
+        assert obss.shape[0] == 8
+        actions = jnp.zeros((8,) + PushCubeEnv().action_space.shape, jnp.float32)
+        _, new_obss, rewards, dones = jax.vmap(step_fn)(states, actions)
+        assert new_obss.shape[0] == 8
+
+
+# ── gym_to_jax: NavEnv (general AST path) ────────────────────────────────────
+
+class TestGymToJaxNavEnv:
+    def test_converts(self, nav_fns):
+        reset_fn, step_fn = nav_fns
+        assert callable(reset_fn) and callable(step_fn)
+
+    def test_reset_shape(self, nav_fns):
+        reset_fn, _ = nav_fns
+        key = jax.random.PRNGKey(0)
+        state, obs = reset_fn(key)
+        assert obs.shape == (NavEnv().observation_space.shape[0],)
+
+    def test_step(self, nav_fns):
+        reset_fn, step_fn = nav_fns
+        key = jax.random.PRNGKey(1)
+        state, obs = reset_fn(key)
+        action = jnp.zeros(NavEnv().action_space.shape, jnp.float32)
+        new_state, new_obs, reward, done = step_fn(state, action)
+        assert new_obs.shape == obs.shape
+
+    def test_jit(self, nav_fns):
+        reset_fn, step_fn = nav_fns
+        key = jax.random.PRNGKey(2)
+        state, obs = jax.jit(reset_fn)(key)
+        action = jnp.zeros(NavEnv().action_space.shape, jnp.float32)
+        jax.jit(step_fn)(state, action)
+
+    def test_vmap(self, nav_fns):
+        reset_fn, step_fn = nav_fns
+        keys = jax.random.split(jax.random.PRNGKey(3), 8)
+        states, obss = jax.vmap(reset_fn)(keys)
+        assert obss.shape[0] == 8
+
+
+# ── compile_ppo: end-to-end convergence ──────────────────────────────────────
+
+class TestCompilePPO:
+    def _make_net(self, obs_dim, action_dim):
+        from flax import linen as nn
+        import jax.numpy as jnp
+
+        class ActorCritic(nn.Module):
+            obs_dim:    int
+            action_dim: int
+
+            @nn.compact
+            def __call__(self, obs):
+                x = nn.tanh(nn.Dense(64)(obs))
+                x = nn.tanh(nn.Dense(64)(x))
+                mean    = nn.Dense(self.action_dim)(x)
+                log_std = self.param('log_std', nn.initializers.zeros, (self.action_dim,))
+                value   = nn.Dense(1)(x)[..., 0]
+                return mean, jnp.broadcast_to(log_std, mean.shape), value
+
+        return ActorCritic(obs_dim=obs_dim, action_dim=action_dim)
+
+    def test_navenv_convergence(self):
+        reset_fn, step_fn = gym_to_jax(NavEnv)
+        env = NavEnv()
+        net = self._make_net(env.observation_space.shape[0], env.action_space.shape[0])
+        trainer = compile_ppo(reset_fn, step_fn, net,
+                              obs_dim=env.observation_space.shape[0],
+                              action_dim=env.action_space.shape[0])
+        result = trainer.train(PPOConfig(num_envs=16, horizon=64, updates=50), seed=0)
+        assert result["total_steps"] == 16 * 64 * 50
+        assert result["steps_per_second"] > 0
