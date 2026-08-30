@@ -21,6 +21,51 @@ Together they take a standard NumPy Gymnasium env to a 22× faster compiled trai
 
 ---
 
+## Usage
+
+```bash
+pip install rl2xla
+```
+
+```python
+import gymnasium as gym
+from flax import linen as nn
+from rl2xla import gym_to_jax, compile_ppo, PPOConfig
+import jax.numpy as jnp
+
+# 1. Define your ActorCritic network
+class ActorCritic(nn.Module):
+    action_dim: int
+    @nn.compact
+    def __call__(self, obs):
+        x = nn.tanh(nn.Dense(64)(obs))
+        x = nn.tanh(nn.Dense(64)(x))
+        mean    = nn.Dense(self.action_dim)(x)
+        log_std = self.param('log_std', nn.initializers.zeros, (self.action_dim,))
+        value   = nn.Dense(1)(x)[..., 0]
+        return mean, jnp.broadcast_to(log_std, mean.shape), value
+
+# 2. Point it at any Gymnasium env
+env = gym.make("MountainCarContinuous-v0").unwrapped
+obs_dim    = env.observation_space.shape[0]   # 2
+action_dim = env.action_space.shape[0]        # 1
+
+reset_fn, step_fn = gym_to_jax(env.__class__)
+
+# 3. Compile and train
+trainer = compile_ppo(reset_fn, step_fn,
+                      ActorCritic(action_dim=action_dim),
+                      obs_dim=obs_dim,
+                      action_dim=action_dim)
+
+result = trainer.train(PPOConfig(num_envs=256, updates=300), seed=0)
+print(f"{result['wall_time_s']:.1f}s  —  {result['steps_per_second']:,} steps/s")
+```
+
+Works out of the box with **CartPole-v1**, **MountainCar-v0**, **MountainCarContinuous-v0**, **Pendulum-v1**, and any custom env with pure Python + NumPy logic.
+
+---
+
 ## Framework
 
 ```
