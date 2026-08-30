@@ -2,13 +2,6 @@
 
 ![Workflow](assets/plots/workflow_v8.png)
 
-<div align="center">
-  <img src="assets/isaaclab/panda_stack_rollout_01.png" width="32%" />
-  <img src="assets/isaaclab/panda_stack_rollout_02.png" width="32%" />
-  <img src="assets/isaaclab/panda_stack_rollout_03.png" width="32%" />
-</div>
-
-<br>
 
 Contact-rich robot manipulation is bottlenecked by Python interpreter overhead. Every PPO gradient update requires thousands of env steps, all gated by `for` loops that stall the CPU waiting for the interpreter instead of computing. This project eliminates those bottlenecks by compiling the full training loop into JAX/XLA — and ships two tools that let you do it for **any Gymnasium env** without rewriting it by hand.
 
