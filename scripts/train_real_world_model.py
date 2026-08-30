@@ -1,9 +1,9 @@
 import argparse, json
 from pathlib import Path
 import numpy as np
-from ewm.real_data import load_single_arm, split
-from ewm.preprocess import fit_standardizer, transform
-from ewm.tabular_world_model import TabularWorldModel
+from rl2xla.real_data import load_single_arm, split
+from rl2xla.preprocess import fit_standardizer, transform
+from rl2xla.tabular_world_model import TabularWorldModel
 
 parser=argparse.ArgumentParser(); parser.add_argument("path"); parser.add_argument("--steps",type=int,default=2000); parser.add_argument("--max-rows",type=int,default=200000); parser.add_argument("--max-episodes",type=int); parser.add_argument("--batch-size",type=int,default=256); parser.add_argument("--seed",type=int,default=0); parser.add_argument("--target",choices=["absolute","residual"],default="absolute"); parser.add_argument("--normalize",action="store_true"); parser.add_argument("--output",default="artifacts/single_arm_world_model.pkl"); args=parser.parse_args()
 raw=load_single_arm(args.path,max_rows=args.max_rows,max_episodes=args.max_episodes); train_raw,val_raw=split(raw); stats=fit_standardizer(train_raw) if args.normalize else {k: np.zeros(v.shape[1],np.float32) for k,v in train_raw.items() if k in ("obs","action","next_obs")}

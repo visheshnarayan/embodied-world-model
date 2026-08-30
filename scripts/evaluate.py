@@ -1,8 +1,8 @@
 import argparse,numpy as np
 from pathlib import Path
-from ewm.env import PushCubeEnv
-from ewm.planner import mpc_action
-from ewm.world_model import WorldModel
+from rl2xla.env import PushCubeEnv
+from rl2xla.planner import mpc_action
+from rl2xla.world_model import WorldModel
 p=argparse.ArgumentParser(); p.add_argument('--controller',choices=['mpc','random'],default='mpc'); p.add_argument('--episodes',type=int,default=20); p.add_argument('--seed',type=int,default=0); p.add_argument('--model',default='artifacts/world_model.pkl'); a=p.parse_args(); rng=np.random.default_rng(a.seed); wins=0
 model=WorldModel(a.seed)
 if a.controller=='mpc' and Path(a.model).exists(): model.load(a.model)

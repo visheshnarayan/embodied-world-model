@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
-from ewm.model_env import LearnedDynamicsEnv
-from ewm.cem import cem_action
+from rl2xla.model_env import LearnedDynamicsEnv
+from rl2xla.cem import cem_action
 
 parser=argparse.ArgumentParser(); parser.add_argument("model"); parser.add_argument("dataset"); parser.add_argument("--episodes",type=int,default=20); parser.add_argument("--seed",type=int,default=0); parser.add_argument("--controller",choices=["random","cem"],default="cem"); parser.add_argument("--planning-candidates",type=int,default=8); parser.add_argument("--planning-horizon",type=int,default=4); parser.add_argument("--planning-iterations",type=int,default=2); parser.add_argument("--max-steps",type=int,default=30); args=parser.parse_args(); env=LearnedDynamicsEnv(args.model,args.dataset,args.seed,max_steps=args.max_steps,task="stacking"); returns=[]; successes=0; rng=np.random.default_rng(args.seed)
 for episode in range(args.episodes):

@@ -14,9 +14,9 @@ import numpy as np
 import pytest
 
 from rl2xla import gym_to_jax, compile_ppo, PPOConfig, ConversionError
-from ewm.env import PushCubeEnv
-from ewm.test_env import NavEnv
-from ewm.microduck_env import MicroduckWalkEnv, OBS_DIM, NUM_JOINTS
+from rl2xla.env import PushCubeEnv
+from rl2xla.test_env import NavEnv
+from rl2xla.microduck_env import MicroduckWalkEnv, OBS_DIM, NUM_JOINTS
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

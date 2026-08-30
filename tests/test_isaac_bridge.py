@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from ewm.isaac_bridge import (
+from rl2xla.isaac_bridge import (
     ACTION_DIM,
     SINGLE_ARM_ACTION_NAMES,
     SINGLE_ARM_STATE_NAMES,

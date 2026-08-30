@@ -34,7 +34,7 @@ Homepage = "https://github.com/visheshnarayan/jax-accelerated-robot-rl"
 Repository = "https://github.com/visheshnarayan/jax-accelerated-robot-rl"
 
 [tool.setuptools.packages.find]
-include = ["ewm*", "rl2xla*"]
+include = ["rl2xla*"]
 
 [tool.ruff]
 line-length = 100

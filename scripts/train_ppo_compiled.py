@@ -21,9 +21,9 @@ import jax
 import jax.numpy as jnp
 from flax import linen as nn
 
-from ewm import jax_env
-from ewm.env import PushCubeEnv
-from ewm.jax_convert import PPOConfig, compile_ppo
+from rl2xla import jax_env
+from rl2xla.env import PushCubeEnv
+from rl2xla.jax_convert import PPOConfig, compile_ppo
 
 
 # ── Policy (identical architecture to Tier 2 / Tier 4 baselines) ─────────────

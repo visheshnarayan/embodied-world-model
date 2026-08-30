@@ -1,8 +1,8 @@
 import argparse, csv
 from pathlib import Path
 import numpy as np
-from ewm.real_data import load_single_arm
-from ewm.tabular_world_model import TabularWorldModel
+from rl2xla.real_data import load_single_arm
+from rl2xla.tabular_world_model import TabularWorldModel
 
 parser=argparse.ArgumentParser(); parser.add_argument("model"); parser.add_argument("dataset"); parser.add_argument("--episodes",type=int,default=20); parser.add_argument("--horizons",type=int,nargs="+",default=[1,5,10]); parser.add_argument("--output",default="artifacts/rollout_error.csv"); args=parser.parse_args()
 model,_=TabularWorldModel.load(args.model); data=load_single_arm(args.dataset); rows=[]

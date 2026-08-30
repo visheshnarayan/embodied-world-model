@@ -3,9 +3,9 @@ import argparse
 from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
-from ewm.env import PushCubeEnv
-from ewm.planner import mpc_action
-from ewm.world_model import WorldModel
+from rl2xla.env import PushCubeEnv
+from rl2xla.planner import mpc_action
+from rl2xla.world_model import WorldModel
 
 def main():
     p=argparse.ArgumentParser(); p.add_argument("--model",default="artifacts/world_model.pkl"); p.add_argument("--seed",type=int,default=0); p.add_argument("--out",default="artifacts/figures/rollout.png"); p.add_argument("--candidates",type=int,default=4); p.add_argument("--horizon",type=int,default=4); a=p.parse_args()

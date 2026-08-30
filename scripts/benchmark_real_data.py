@@ -2,9 +2,9 @@
 import argparse, csv
 from pathlib import Path
 import numpy as np
-from ewm.real_data import load_single_arm, split
-from ewm.preprocess import fit_standardizer, transform
-from ewm.tabular_world_model import TabularWorldModel
+from rl2xla.real_data import load_single_arm, split
+from rl2xla.preprocess import fit_standardizer, transform
+from rl2xla.tabular_world_model import TabularWorldModel
 
 parser=argparse.ArgumentParser(); parser.add_argument("path"); parser.add_argument("--episodes",type=int,default=10); parser.add_argument("--steps",type=int,default=300); parser.add_argument("--batch-size",type=int,default=64); parser.add_argument("--seed",type=int,default=0); parser.add_argument("--output",default="artifacts/single_arm_benchmark.csv"); args=parser.parse_args()
 raw=load_single_arm(args.path,max_episodes=args.episodes); train_raw,val_raw=split(raw); rows=[]

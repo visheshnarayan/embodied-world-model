@@ -1,9 +1,9 @@
 import argparse,json
 from pathlib import Path
 import numpy as np
-from ewm.env import PushCubeEnv
-from ewm.planner import mpc_action
-from ewm.world_model import WorldModel
+from rl2xla.env import PushCubeEnv
+from rl2xla.planner import mpc_action
+from rl2xla.world_model import WorldModel
 def main():
     p=argparse.ArgumentParser(); p.add_argument('--episodes',type=int,default=30); p.add_argument('--seed',type=int,default=0); p.add_argument('--model',default='artifacts/world_model.pkl'); a=p.parse_args(); rng=np.random.default_rng(a.seed); wins=0; model=WorldModel(a.seed); model.load(a.model)
     for ep in range(a.episodes):

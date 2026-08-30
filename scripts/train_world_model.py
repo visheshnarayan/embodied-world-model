@@ -1,8 +1,8 @@
 from pathlib import Path
 import argparse,json,numpy as np
-from ewm.env import PushCubeEnv
-from ewm.replay import collect_random,batch
-from ewm.world_model import WorldModel
+from rl2xla.env import PushCubeEnv
+from rl2xla.replay import collect_random,batch
+from rl2xla.world_model import WorldModel
 def main():
     p=argparse.ArgumentParser(); p.add_argument('--steps',type=int,default=1000); p.add_argument('--seed',type=int,default=0); p.add_argument('--episodes',type=int,default=100); a=p.parse_args(); out=Path('artifacts'); out.mkdir(exist_ok=True)
     data=collect_random(PushCubeEnv(),a.episodes,a.seed); model=WorldModel(a.seed); rng=np.random.default_rng(a.seed); losses=[]

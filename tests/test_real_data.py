@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from ewm.real_data import load_single_arm
+from rl2xla.real_data import load_single_arm
 
 def test_lerobot_transition_loader(tmp_path):
     root = tmp_path / "dataset" / "data"; root.mkdir(parents=True)

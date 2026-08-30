@@ -67,8 +67,8 @@ NumPy Gymnasium env
 ```
 
 ```python
-from ewm.gym_to_jax import gym_to_jax
-from ewm.jax_convert import compile_ppo, PPOConfig
+from rl2xla.gym_to_jax import gym_to_jax
+from rl2xla.jax_convert import compile_ppo, PPOConfig
 
 reset_fn, step_fn = gym_to_jax(MyEnv)                                   # convert
 trainer = compile_ppo(reset_fn, step_fn, net, obs_dim=4, action_dim=2)  # compile
@@ -234,7 +234,7 @@ python scripts/benchmark_throughput.py --steps 2000000 --envs 128
 ## Project layout
 
 ```
-ewm/
+rl2xla/
   env.py              Tier 2 NumPy Gymnasium env (Python-loopable)
   jax_env.py          Tier 4 env — pure-JAX stateless (vmap/scan-safe)
   jax_convert.py      compile_ppo — 3 compiled XLA kernels + PPOConfig

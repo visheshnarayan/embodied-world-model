@@ -19,9 +19,9 @@ import jax.numpy as jnp
 import numpy as np
 from flax import linen as nn
 
-from ewm.microduck_env import MicroduckWalkEnv, OBS_DIM, NUM_JOINTS
-from ewm.gym_to_jax import gym_to_jax
-from ewm.jax_convert import compile_ppo, PPOConfig
+from rl2xla.microduck_env import MicroduckWalkEnv, OBS_DIM, NUM_JOINTS
+from rl2xla.gym_to_jax import gym_to_jax
+from rl2xla.jax_convert import compile_ppo, PPOConfig
 
 
 # ── Shared network ────────────────────────────────────────────────────────────

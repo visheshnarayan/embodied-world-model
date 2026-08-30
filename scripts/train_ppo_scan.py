@@ -29,7 +29,7 @@ import numpy as np
 import optax
 from flax import linen as nn
 
-from ewm import jax_env
+from rl2xla import jax_env
 
 
 # ── Network ───────────────────────────────────────────────────────────────────

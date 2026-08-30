@@ -1,5 +1,5 @@
 import numpy as np
-from ewm.env import PushCubeEnv
+from rl2xla.env import PushCubeEnv
 def test_deterministic_rollout():
     e1,e2=PushCubeEnv(),PushCubeEnv(); o1,_=e1.reset(seed=7); o2,_=e2.reset(seed=7); assert np.allclose(o1,o2)
     for _ in range(5):

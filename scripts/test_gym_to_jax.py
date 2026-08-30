@@ -6,9 +6,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ewm.env import PushCubeEnv
-from ewm.test_env import NavEnv
-from ewm.gym_to_jax import gym_to_jax, ConversionError
+from rl2xla.env import PushCubeEnv
+from rl2xla.test_env import NavEnv
+from rl2xla.gym_to_jax import gym_to_jax, ConversionError
 
 
 def test_env(env_class, name):

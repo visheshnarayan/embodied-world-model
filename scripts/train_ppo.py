@@ -12,7 +12,7 @@ import numpy as np
 import optax
 from flax import linen as nn
 
-from ewm.env import PushCubeEnv
+from rl2xla.env import PushCubeEnv
 
 
 class ActorCritic(nn.Module):

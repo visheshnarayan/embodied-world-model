@@ -13,8 +13,8 @@ automatically.  The caller never writes a for-loop.
 
 Example
 -------
-from ewm import jax_env
-from ewm.jax_convert import compile_ppo, PPOConfig
+from rl2xla import jax_env
+from rl2xla.jax_convert import compile_ppo, PPOConfig
 from flax import linen as nn
 
 class ActorCritic(nn.Module):

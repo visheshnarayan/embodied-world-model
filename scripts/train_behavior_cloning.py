@@ -1,8 +1,8 @@
 import argparse,json
 from pathlib import Path
 import numpy as np
-from ewm.real_data import load_single_arm,split
-from ewm.policy import BehaviorCloningPolicy
+from rl2xla.real_data import load_single_arm,split
+from rl2xla.policy import BehaviorCloningPolicy
 
 parser=argparse.ArgumentParser(); parser.add_argument("dataset"); parser.add_argument("--episodes",type=int,default=100); parser.add_argument("--steps",type=int,default=2000); parser.add_argument("--batch-size",type=int,default=128); parser.add_argument("--seed",type=int,default=0); parser.add_argument("--output",default="artifacts/single_arm_bc.pkl"); args=parser.parse_args()
 data=load_single_arm(args.dataset,max_episodes=args.episodes); train,val=split(data); goals=np.zeros_like(train["obs"])

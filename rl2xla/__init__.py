@@ -22,8 +22,8 @@ Example
     result  = trainer.train(PPOConfig(num_envs=256, updates=300), seed=0)
 """
 
-from ewm.gym_to_jax import gym_to_jax, ConversionError
-from ewm.jax_convert import compile_ppo, PPOConfig, PPOTrainer
+from rl2xla.gym_to_jax import gym_to_jax, ConversionError
+from rl2xla.jax_convert import compile_ppo, PPOConfig, PPOTrainer
 
 __version__ = "0.1.0"
 __all__ = ["gym_to_jax", "ConversionError", "compile_ppo", "PPOConfig", "PPOTrainer"]

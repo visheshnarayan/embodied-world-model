@@ -5,10 +5,10 @@ from pathlib import Path
 
 import numpy as np
 
-from ewm.env import PushCubeEnv
-from ewm.metrics import evaluate_controller, one_step_model_mse
-from ewm.replay import batch, collect_random
-from ewm.world_model import WorldModel
+from rl2xla.env import PushCubeEnv
+from rl2xla.metrics import evaluate_controller, one_step_model_mse
+from rl2xla.replay import batch, collect_random
+from rl2xla.world_model import WorldModel
 
 
 def main():
