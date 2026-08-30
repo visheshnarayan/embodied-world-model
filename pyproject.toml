@@ -30,8 +30,8 @@ dependencies = [
 dev = ["pytest>=8", "ruff>=0.5"]
 
 [project.urls]
-Homepage = "https://github.com/visheshnarayan/jax-accelerated-robot-rl"
-Repository = "https://github.com/visheshnarayan/jax-accelerated-robot-rl"
+Homepage = "https://github.com/visheshnarayan/rl2xla"
+Repository = "https://github.com/visheshnarayan/rl2xla"
 
 [tool.setuptools.packages.find]
 include = ["rl2xla*"]
