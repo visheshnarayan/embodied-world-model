@@ -7,9 +7,6 @@
   <img src="assets/isaaclab/panda_stack_rollout_02.png" width="32%" />
   <img src="assets/isaaclab/panda_stack_rollout_03.png" width="32%" />
 </div>
-<div align="center">
-  <img src="assets/isaaclab/panda_stack_rollout_sequence.png" width="98%" />
-</div>
 
 <br>
 
