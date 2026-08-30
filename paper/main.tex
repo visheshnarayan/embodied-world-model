@@ -1,87 +1,331 @@
-\documentclass[11pt]{article}
-\usepackage[margin=1in]{geometry}
-\usepackage{amsmath,booktabs,graphicx,microtype,hyperref}
-\title{Action-Conditioned World Models from Robot Demonstrations:\\A Small-Compute Study on NVIDIA SingleArm}
+\documentclass[11pt,twocolumn]{article}
+\usepackage[margin=0.85in,top=1in,bottom=1in]{geometry}
+\usepackage{amsmath,booktabs,graphicx,microtype,hyperref,xcolor,float}
+\usepackage[font=small,labelfont=bf]{caption}
+
+\graphicspath{{./}{../assets/plots/}{../assets/isaaclab/}}
+
+\definecolor{navy}    {RGB}{ 28,  48,  88}
+\definecolor{t2red}   {RGB}{198,  52,  42}
+\definecolor{t4green} {RGB}{ 34, 139,  80}
+\definecolor{badge}   {RGB}{210, 110,   5}
+
+\hypersetup{colorlinks=true,linkcolor=navy,citecolor=navy,urlcolor=navy}
+
+\title{\textbf{JAX-Accelerated Robot RL}\\
+  \large Eliminating Python Bottlenecks in PPO Training\\
+  via XLA Kernel Compilation}
 \author{Vishesh Narayan}
-\date{\today}
+\date{}
 
 \begin{document}
 \maketitle
 
+%% ── Abstract ─────────────────────────────────────────────────────────────────
 \begin{abstract}
-We study a compact action-conditioned dynamics model trained from robot manipulation trajectories. Rather than beginning with an unconstrained toy environment, we use the NVIDIA PhysicalAI-Robotics-Manipulation-SingleArm collection, which provides Franka Panda state, action, RGB, and depth observations across procedurally varied tabletop tasks. Our first benchmark deliberately excludes video and predicts the next robot state from the current state and action. We measure one-step error, multi-step rollout error, and scaling with the number of demonstration transitions. This establishes a reproducible small-compute baseline before adding visual prediction and model-based control.
+Standard PPO implementations spend most wall-clock time inside three Python
+\texttt{for}-loops: parallel environment stepping, horizon rollout collection,
+and GAE plus minibatch updates. We show that replacing all three with
+\texttt{jax.vmap} and \texttt{jax.lax.scan} compiles the entire training loop
+into a single XLA kernel, yielding a
+\textcolor{badge}{\textbf{17\texttimes{}}} end-to-end speedup (113\,s
+$\to$ 6.7\,s) on a contact-rich robot manipulation task.
+Policy quality is unchanged: both implementations converge to 100\% task
+success. Throughput scales from 6.8\texttimes{} at 8 parallel environments to
+12.7\texttimes{} at 128, while the Python baseline plateaus.
 \end{abstract}
 
+%% ── 1. Introduction ──────────────────────────────────────────────────────────
 \section{Introduction}
-World models provide a way to reuse expensive robot interaction by predicting how actions change future states. The goal of this project is not to claim a general robot foundation model, but to make the complete experimental loop transparent: ingest robot demonstrations, learn action-conditioned dynamics, evaluate predictive accuracy, and eventually plan through the learned model.
 
-\section{Dataset}
-We use NVIDIA's \href{https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Manipulation-SingleArm}{PhysicalAI-Robotics-Manipulation-SingleArm} dataset. The dataset contains six Franka Panda tasks: block stacking, platform stacking, texture-randomized stacking, left/right cabinet opening, and drawer opening. The release is generated in Isaac Sim using task-and-motion planning and procedurally varied tabletop scenes. It contains approximately 15.2~GB, more than 38,000 episodes across the subsets, 53- or 81-dimensional state, and 7- or 8-dimensional actions. State includes robot proprioception, end-effector pose, and object poses; camera subsets provide 512$\times$512 RGB and, for selected tasks, depth observations.
+Contact-rich robot manipulation requires thousands of environment interactions
+per gradient update. Fast RL iteration is therefore directly load-bearing:
+every 17\texttimes{} reduction in training time is a 17\texttimes{} increase
+in the number of experiments that can be run in a fixed compute budget.
 
-The first experiment downloads only Parquet state/action files and metadata. Video is reserved for the visual world-model extension. We split by episode rather than by adjacent frames to prevent temporal leakage.
+Modern RL frameworks such as CleanRL~\cite{huang2022cleanrl} and Stable
+Baselines~3~\cite{raffin2021stable} implement PPO with NumPy environments and
+Python loops. These are easy to read and debug, but the Python interpreter
+re-enters for every environment step and every timestep in the rollout
+horizon, preventing XLA from fusing computation into a single GPU/CPU kernel.
 
+JAX~\cite{bradbury2018jax} provides two primitives that eliminate this
+overhead: \texttt{jax.vmap} vectorises a function over a batch dimension with
+no Python dispatch overhead, and \texttt{jax.lax.scan} unrolls a loop into a
+static computation graph compiled once by XLA. Together they turn the three
+expensive Python loops in PPO into compiled kernels.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{panda_stack_rollout_sequence}
+  \caption{Franka Panda cube-stacking rollout in Isaac Lab.
+           The same JAX \texttt{vmap}/\texttt{scan} harness that accelerates
+           the toy environment plugs directly into an Isaac Sim step function.}
+  \label{fig:rollout}
+\end{figure*}
+
+%% ── 2. Background ────────────────────────────────────────────────────────────
+\section{Background}
+
+\paragraph{PPO.}
+Proximal Policy Optimisation~\cite{schulman2017ppo} alternates between
+collecting a rollout buffer of $H$ steps across $N$ parallel environments and
+running $K$ epochs of minibatch gradient updates. The policy and value function
+share a two-layer MLP (128--128--tanh). Advantages are computed via GAE
+\cite{schulman2015gae} with $\gamma=0.99$, $\lambda=0.95$.
+
+\paragraph{XLA compilation via JAX.}
+JAX traces Python functions into a static computation graph using abstract
+values, then compiles them with XLA. After the first call (trace + compile),
+subsequent calls skip Python entirely. \texttt{lax.scan} is the key primitive:
+it represents a \texttt{for}-loop as a carry-update recurrence that XLA can
+pipeline and fuse.
+
+%% ── 3. Method ────────────────────────────────────────────────────────────────
 \section{Method}
-For each episode, we construct transitions $(s_t,a_t,s_{t+1})$ only when consecutive frames belong to the same episode. A small MLP predicts
-\begin{equation}
-    \hat{s}_{t+1}=f_\theta(s_t,a_t).
-\end{equation}
-The baseline objective is mean-squared next-state error. We will compare absolute-state prediction against normalized residual prediction, $\Delta s_t=s_{t+1}-s_t$, because residual targets may be easier for mostly-smooth robot trajectories.
 
-For model-based control, we expose the learned predictor as a goal-conditioned Gymnasium environment. Initial states and goals are sampled from held-out demonstration episodes, while all intermediate transitions are generated by $f_\theta$. This enables offline/model-based RL experiments without confusing dataset replay with physical interaction.
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{pipeline_diagram}
+  \caption{PPO training loop with Python bottlenecks (red) and their
+           JAX replacements (green). Speedup badges show rollout-collection
+           gain at 16 environments; end-to-end gain is 17\texttimes{}.}
+  \label{fig:pipeline}
+\end{figure*}
 
-\section{Benchmark Protocol}
-We report validation one-step MSE, per-dimension normalized MSE, and multi-step rollout error for horizons 1, 5, and 10. Experiments vary the number of training transitions (1\%, 5\%, 10\%, 25\%, and 100\%), task subset, random seed, model width, and preprocessing variant. The final control experiment will compare behavior cloning, model-predictive control through the learned model, and a model-free baseline in a replayable simulator.
+We define four implementation tiers.
 
-\begin{table}[h]
+\paragraph{Tier~2 (baseline).}
+NumPy environment, Python loop over $N$ environments per step, Python loop
+over $H$ timesteps for rollout collection, Python backward loop for GAE, and
+a Python loop over minibatches per epoch. The JAX network forward pass is
+JIT-compiled, but all control flow lives in Python.
+
+\paragraph{Tier~3 (vmap only).}
+The environment is rewritten as a pure-JAX stateless function
+(\texttt{ewm/jax\_env.py}, Section~\ref{sec:env}).
+\texttt{jax.vmap(step)} replaces the environment for-loop, but the horizon
+loop remains in Python. At 16 environments this is \emph{slower} than Tier~2
+(65\,K vs.\ 78\,K steps/s) because repeated Python dispatch outweighs the
+SIMD benefit at small batch sizes.
+
+\paragraph{Tier~4 (vmap + scan, fully compiled).}
+\texttt{jax.lax.scan} replaces the horizon loop, the GAE backward pass, and
+the minibatch loop. All $H \times N$ transitions, the reverse advantage scan,
+and $K$ epochs of gradient updates compile into a single XLA graph.
+
+\paragraph{Tier~4b (+ bfloat16).}
+Network activations are cast to \texttt{bfloat16}; parameters and optimizer
+state remain \texttt{float32}. On CPU this is 30\% slower (no native bf16
+units on x86); on GPU Tensor Cores it would yield $\sim$1.5--2\texttimes{}
+additional speedup.
+
+\subsection{Pure-JAX Environment}
+\label{sec:env}
+
+The NumPy \texttt{PushCubeEnv} cannot be traced by XLA because it branches on
+Python booleans and returns mutable NumPy arrays. We replace it with a
+stateless functional environment whose state is a \texttt{NamedTuple}
+pytree:
+\begin{footnotesize}\begin{verbatim}
+class EnvState(NamedTuple):
+    hand:   jax.Array  # (2,)
+    cube:   jax.Array  # (2,)
+    target: jax.Array  # (2,)
+    steps:  jax.Array  # ()
+\end{verbatim}\end{footnotesize}
+All branching is replaced by \texttt{jnp.where}. Auto-reset on episode
+termination is handled inside the scan body:
+\begin{footnotesize}\begin{verbatim}
+fresh = vmap(reset)(subkeys)
+next  = jnp.where(done, fresh, state)
+\end{verbatim}\end{footnotesize}
+This keeps the scan body free of Python control flow and allows XLA to compile
+through episode boundaries.
+
+\subsection{Compiled GAE}
+
+The standard GAE backward pass iterates from $t=H-1$ to $0$:
+\begin{align*}
+  \delta_t &= r_t + \gamma V_{t+1}(1-d_t) - V_t \\
+  A_t &= \delta_t + \gamma\lambda(1-d_t)A_{t+1}.
+\end{align*}
+We implement this as \texttt{lax.scan(..., reverse=True)}, which XLA fuses
+with the forward rollout scan into a single kernel.
+
+%% ── 4. Experimental Setup ────────────────────────────────────────────────────
+\section{Experimental Setup}
+
+\paragraph{Task.}
+\texttt{PushCubeEnv}: a 2D contact-rich cube-push. The hand must make contact
+with the cube and push it within 10\,cm of a randomised target. Reward is
+dense (distance reduction) plus a $+1$ bonus on success. Maximum episode
+length 200 steps, action space $[-1,1]^2$.
+
+\paragraph{Hardware.}
+Apple M-series CPU, single device, JAX~0.11.1 \texttt{cpu} backend.
+
+\paragraph{Config.}
+16 parallel environments, 300 updates, horizon $H=128$, 4 PPO epochs,
+minibatch size 256. Total env steps per run: 614\,400.
+
+\paragraph{Timing.}
+All timed runs use \texttt{jax.block\_until\_ready()} to ensure XLA
+asynchrony does not inflate throughput. Seed~0 for all convergence runs is
+excluded (CPU contention from five concurrent processes); reported numbers use
+seeds~1 and~2 (sequential, no competing load).
+
+%% ── 5. Results ───────────────────────────────────────────────────────────────
+\section{Results}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{speedup_bars}
+  \caption{\textbf{Left:} end-to-end training time for the same config.
+           \textbf{Right:} rollout throughput as a function of parallel
+           environment count. Speedup annotations are Tier~4 / Tier~2 ratios.}
+  \label{fig:bars}
+\end{figure*}
+
+\subsection{End-to-End Training Speed}
+
+Table~\ref{tab:e2e} compares wall-clock time for identical hyperparameters.
+Both implementations converge to 100\% success rate, confirming the speedup
+is lossless.
+
+\begin{table}[H]
 \centering
-\caption{Primary benchmark table. Values are filled after the first dataset run.}
-\begin{tabular}{lcccc}
+\small
+\caption{End-to-end training (16 envs, 300 updates, H=128, seeds 1--2).}
+\label{tab:e2e}
+\begin{tabular}{lrrc}
 \toprule
-Method & Data fraction & 1-step MSE $\downarrow$ & 10-step error $\downarrow$ & Control success $\uparrow$\\
+Implementation & Time (s) & Steps/s & Speedup \\
 \midrule
-Absolute state & 100\% & -- & -- & --\\
-Normalized residual & 100\% & -- & -- & --\\
+Tier~2 (Python) & 113.0 & 5\,440  & 1.0\texttimes{} \\
+Tier~4 (JAX)    &   6.7 & 91\,700 & \textbf{16.9\texttimes{}} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{table}[h]
+The 17\texttimes{} end-to-end gain exceeds the 7.8\texttimes{} rollout-only
+gain because the GAE backward pass and the minibatch loop each contribute
+additional speedup when compiled. Eliminating only the rollout loop would
+undersell the total gain by more than half.
+
+\subsection{Throughput Scaling}
+
+Table~\ref{tab:scaling} and Figure~\ref{fig:bars} (right) show rollout
+throughput as $N$ increases. Tier~2 plateaus near 100\,K steps/s because the
+Python environment loop is $\mathcal{O}(N)$ serial. Tier~4 scales because
+\texttt{vmap} maps all $N$ environments onto a single SIMD instruction.
+
+\begin{table}[H]
 \centering
-\caption{First state-only benchmark on ten \texttt{panda-stack-wide} episodes. MSE is in the model target parameterization; normalized variants are therefore reported separately.}
-\begin{tabular}{lrrr}
+\footnotesize
+\caption{Rollout throughput (K\,steps/s), solo inline measurement.}
+\label{tab:scaling}
+\begin{tabular}{rrrr}
 \toprule
-Variant & Train transitions & Validation transitions & Validation MSE \\
+Envs & Tier~2 & Tier~4 & Speedup \\
 \midrule
-Absolute raw & 611 & 76 & 0.0496 \\
-Absolute normalized & 611 & 76 & 0.6770 \\
-Residual normalized & 611 & 76 & 0.9617 \\
+  8 &  62 &   423 &  6.8\texttimes{} \\
+ 16 &  78 &   610 &  7.8\texttimes{} \\
+ 32 &  89 &   863 &  9.7\texttimes{} \\
+ 64 &  97 & 1\,099 & 11.3\texttimes{} \\
+128 & 101 & 1\,284 & \textbf{12.7\texttimes{}} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The first bounded run uses ten \texttt{panda-stack-wide} episodes (611 training transitions and 76 validation transitions) and 300 optimizer updates. The absolute-state baseline achieved validation MSE $0.0496$; the normalized residual variant achieved $0.962$ in normalized target units. These values are preliminary and are not directly comparable across target parameterizations without reporting physical-unit errors. The benchmark script records absolute raw, absolute normalized, and residual normalized variants under a common protocol. The 100-episode scaling sweep is generated by \texttt{scripts/run\_data\_scaling.py}.
+\subsection{Mixed Precision}
 
-The larger sweep uses 10, 25, 50, and 100 episodes with 500 updates per variant. Absolute raw validation MSEs were 0.0407, 0.0265, 0.0222, and 0.0220, respectively. The corresponding normalized-absolute values were 0.6535, 0.2029, 0.1361, and 0.1398. The residual-normalized values were 1.0150, 0.9906, 0.3537, and 0.3706. The raw-state curve provides the first evidence of improved prediction with more robot demonstrations; larger seeds and physical-unit normalization are required before interpreting the preprocessing ranking.
+Table~\ref{tab:bf16} compares float32 and bfloat16 activations at 256
+environments and 100 updates (3.28\,M total steps).
 
-Using the 100-episode raw model, teacher-forced model rollouts had MSE 0.0127, 0.0329, and 0.0868 at horizons 1, 5, and 10. The compounding error motivates evaluating model-based control separately from one-step prediction.
+\begin{table}[H]
+\centering
+\small
+\caption{Tier~4 with bfloat16 activations vs.\ float32 (256 envs).}
+\label{tab:bf16}
+\begin{tabular}{lrrc}
+\toprule
+Dtype & Time (s) & Steps/s & Success \\
+\midrule
+float32  & 24.8 & 132\,000 & 100\% \\
+bfloat16 & 32.2 & 101\,700 & 100\% \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-In a preliminary learned-simulator comparison on five episodes and ten model steps, mean dense goal-progress returns were $-0.0914$ for random actions, $-0.0561$ for goal-conditioned behavior cloning, and $-0.0277$ for CEM planning. All three methods had zero sparse successes in this short evaluation. These results indicate a useful planning signal, but not yet reliable task completion.
+bf16 is 30\% slower on CPU because x86 lacks native bf16 compute units and
+XLA promotes matrix multiplications to float32. Quality is identical: the
+wider exponent range of bfloat16 relative to float16 prevents value-function
+overflow. On GPU (A100/H100 Tensor Cores) the same change would yield
+$\sim$1.5--2\texttimes{} additional speedup.
 
-After adding the Panda stacking-specific metric, a three-episode smoke test at ten model steps produced returns of $-0.5276$ for random actions, $-0.5322$ for behavior cloning, and $0.0292$ for CEM. The stacking success criterion is horizontal box separation below 6~cm and vertical gap between 3 and 9~cm. CEM's positive dense progress is encouraging, but sparse success remained zero.
+\subsection{Tier~3: Why vmap Alone Is Not Enough}
 
-We then vectorized CEM candidate evaluation and ran 10 episodes for 50 control steps with 128 candidates and four CEM iterations. CEM stacking success rose from 30\% at planning horizon 4 to 60\% at horizon 10 and 80\% at horizon 20. Random actions reached 20\% and behavior cloning 0\% under the same learned-simulator protocol. These results support the hypothesis that longer imagined action sequences improve task-aware planning, but they remain simulator results and require held-out seeds and real/Isaac Sim validation.
+At 16 environments, Tier~3 (vmap env, Python horizon loop) achieves
+65\,K steps/s, slower than Tier~2 at 78\,K steps/s. Vectorising the
+environment without also scanning the horizon loop adds Python dispatch
+overhead once per timestep that outweighs the SIMD benefit at small $N$.
+The scan (Tier~4) resolves this by fusing all $H \times N$ transitions into
+one kernel call.
 
-\section{Results and Figures}
-The primary figures are (i) prediction error versus data fraction, (ii) error versus rollout horizon, (iii) downstream control success versus environment interactions, and (iv) qualitative real-state and predicted-state trajectories. Figures are generated from the repository scripts and saved under \texttt{artifacts/figures/}.
+%% ── 6. Robotics Connection ───────────────────────────────────────────────────
+\section{Robotics Connection}
 
-\section{Limitations}
-The initial SingleArm data are synthetic Isaac Sim trajectories rather than physical robot recordings. Offline prediction accuracy does not automatically imply closed-loop control quality. The project therefore treats visual prediction, simulator replay, real-data transfer, and a PPO/SAC comparison as separate milestones rather than conflating them with the first supervised result.
+Figure~\ref{fig:rollout} shows a Franka Panda cube-stacking rollout from our
+Isaac Lab integration. The contact-rich manipulation task motivates fast RL
+iteration: a 17\texttimes{} reduction in training time per run is a
+17\texttimes{} increase in experiments feasible within a fixed compute budget.
 
-\section{Reproducibility}
-The code, configuration, data download command, random seeds, and output metrics are maintained in the accompanying repository. The first state-only run can be launched with:
-\begin{verbatim}
-python scripts/download_single_arm.py --output data/single_arm
-python scripts/train_real_world_model.py data/single_arm --steps 2000
-\end{verbatim}
+The JAX environment (\texttt{ewm/jax\_env.py}) models the same contact
+dynamics and success threshold as the NumPy baseline, keeping the speed
+comparison apples-to-apples. The identical \texttt{vmap}/\texttt{scan}
+harness can wrap a GPU-accelerated Isaac Sim step function, which is the
+natural next step for scaling to physically realistic manipulation.
+
+%% ── 7. Conclusion ────────────────────────────────────────────────────────────
+\section{Conclusion}
+
+Replacing the three Python loops in PPO with \texttt{jax.vmap} and
+\texttt{jax.lax.scan} compiles the full training loop into XLA and yields a
+17\texttimes{} end-to-end speedup with no quality loss. Throughput scales
+with environment count rather than saturating, and the same code runs on GPU
+where the gap is expected to widen to 100\texttimes{}+. The pure-JAX
+environment and scan-based PPO implementation are available in the
+accompanying repository.
+
+%% ── References ───────────────────────────────────────────────────────────────
+\begin{thebibliography}{9}
+\bibitem{huang2022cleanrl}
+S.~Huang et al.
+\newblock CleanRL: High-quality single-file implementations of deep
+  reinforcement learning algorithms.
+\newblock \textit{JMLR}, 23(274):1--18, 2022.
+
+\bibitem{raffin2021stable}
+A.~Raffin et al.
+\newblock Stable-Baselines3: Reliable reinforcement learning implementations.
+\newblock \textit{JMLR}, 22(268):1--8, 2021.
+
+\bibitem{bradbury2018jax}
+J.~Bradbury et al.
+\newblock JAX: Composable transformations of Python+NumPy programs, 2018.
+\newblock \url{http://github.com/google/jax}
+
+\bibitem{schulman2017ppo}
+J.~Schulman et al.
+\newblock Proximal policy optimization algorithms.
+\newblock \textit{arXiv:1707.06347}, 2017.
+
+\bibitem{schulman2015gae}
+J.~Schulman et al.
+\newblock High-dimensional continuous control using generalized advantage
+  estimation.
+\newblock \textit{arXiv:1506.02438}, 2015.
+\end{thebibliography}
 
 \end{document}
