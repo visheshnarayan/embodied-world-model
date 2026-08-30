@@ -6,6 +6,7 @@ Tests:
   - reset_fn / step_fn are jit and vmap compatible
   - compile_ppo produces a trainer that converges on both envs
 """
+import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import pytest
@@ -134,3 +135,43 @@ class TestCompilePPO:
         result = trainer.train(PPOConfig(num_envs=16, horizon=64, updates=50), seed=0)
         assert result["total_steps"] == 16 * 64 * 50
         assert result["steps_per_second"] > 0
+
+
+# ── gym_to_jax: classic control envs ─────────────────────────────────────────
+
+@pytest.mark.parametrize("env_name,expected_obs,n_act", [
+    ("CartPole-v1",             (4,), 1),
+    ("MountainCar-v0",          (2,), 1),
+    ("MountainCarContinuous-v0",(2,), 1),
+    ("Pendulum-v1",             (3,), 1),
+])
+class TestClassicControl:
+    def _fns(self, env_name):
+        cls = gym.make(env_name).unwrapped.__class__
+        return gym_to_jax(cls)
+
+    def test_converts(self, env_name, expected_obs, n_act):
+        rf, sf = self._fns(env_name)
+        assert callable(rf) and callable(sf)
+
+    def test_reset_shape(self, env_name, expected_obs, n_act):
+        rf, _ = self._fns(env_name)
+        _, obs = rf(jax.random.PRNGKey(0))
+        assert obs.shape == expected_obs
+
+    def test_step(self, env_name, expected_obs, n_act):
+        rf, sf = self._fns(env_name)
+        state, obs = rf(jax.random.PRNGKey(0))
+        action = jnp.zeros(n_act, jnp.float32)
+        _, new_obs, reward, done = sf(state, action)
+        assert new_obs.shape == expected_obs
+        assert reward.shape == ()
+
+    def test_vmap(self, env_name, expected_obs, n_act):
+        rf, sf = self._fns(env_name)
+        keys = jax.random.split(jax.random.PRNGKey(0), 8)
+        states, obss = jax.vmap(rf)(keys)
+        assert obss.shape == (8,) + expected_obs
+        actions = jnp.zeros((8, n_act), jnp.float32)
+        _, new_obss, _, _ = jax.vmap(sf)(states, actions)
+        assert new_obss.shape == (8,) + expected_obs
