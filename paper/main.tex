@@ -1,9 +1,9 @@
 \documentclass[11pt,twocolumn]{article}
 \usepackage[margin=0.85in,top=1in,bottom=1in]{geometry}
-\usepackage{amsmath,booktabs,graphicx,microtype,hyperref,xcolor,float}
+\usepackage{amsmath,booktabs,graphicx,microtype,hyperref,xcolor,float,multirow}
 \usepackage[font=small,labelfont=bf]{caption}
 
-\graphicspath{{./}{../assets/plots/}{../assets/isaaclab/}}
+\graphicspath{{./}{../assets/plots/}{../assets/isaaclab/}{../assets/}}
 
 \definecolor{navy}    {RGB}{ 28,  48,  88}
 \definecolor{t2red}   {RGB}{198,  52,  42}
@@ -29,10 +29,14 @@ and GAE plus minibatch updates. We show that replacing all three with
 \texttt{jax.vmap} and \texttt{jax.lax.scan} compiles the entire training loop
 into a single XLA kernel, yielding a
 \textcolor{badge}{\textbf{17\texttimes{}}} end-to-end speedup (113\,s
-$\to$ 6.7\,s) on a contact-rich robot manipulation task.
-Policy quality is unchanged: both implementations converge to 100\% task
-success. Throughput scales from 6.8\texttimes{} at 8 parallel environments to
-12.7\texttimes{} at 128, while the Python baseline plateaus.
+$\to$ 6.7\,s) on a contact-rich robot manipulation task with no quality loss.
+We further automate this process with two tools: \texttt{gym\_to\_jax}, a
+9-transformer AST compiler that converts any NumPy Gymnasium environment into
+\texttt{vmap}/\texttt{scan}-compatible JAX functions; and \texttt{compile\_ppo},
+which wraps the converted functions into a fully compiled PPO trainer.
+Together they achieve \textbf{22\texttimes{}} speedup on \texttt{PushCubeEnv}
+and \textbf{28.9\texttimes{}} on a 14-DOF bipedal locomotion environment
+(A100 SXM GPU), with a three-line call.
 \end{abstract}
 
 %% ── 1. Introduction ──────────────────────────────────────────────────────────
@@ -103,7 +107,7 @@ JIT-compiled, but all control flow lives in Python.
 
 \paragraph{Tier~3 (vmap only).}
 The environment is rewritten as a pure-JAX stateless function
-(\texttt{ewm/jax\_env.py}, Section~\ref{sec:env}).
+(\texttt{rl2xla/jax\_env.py}, Section~\ref{sec:env}).
 \texttt{jax.vmap(step)} replaces the environment for-loop, but the horizon
 loop remains in Python. At 16 environments this is \emph{slower} than Tier~2
 (65\,K vs.\ 78\,K steps/s) because repeated Python dispatch outweighs the
@@ -277,7 +281,7 @@ one kernel call.
 \section{The \texttt{compile\_ppo} Framework}
 
 Tier~4 achieves 17\texttimes{} speedup, but requires manually rewriting
-every loop in JAX. We automate this with \texttt{ewm/jax\_convert.py},
+every loop in JAX. We automate this with \texttt{rl2xla/jax\_convert.py},
 a lightweight compilation framework that takes two pure-JAX functions and
 returns a fully compiled PPO trainer with no for-loops exposed to the caller.
 
@@ -355,7 +359,105 @@ The framework is 1.3\texttimes{} faster than hand-written Tier~4 because the
 compilation path eliminates the per-epoch Python call overhead; both
 implementations converge to 100\% success across all seeds.
 
-%% ── 7. Robotics Connection ───────────────────────────────────────────────────
+%% ── 7. gym_to_jax: Automatic Env Conversion ─────────────────────────────────
+\section{The \texttt{gym\_to\_jax} Converter}
+\label{sec:gym_to_jax}
+
+\texttt{compile\_ppo} requires pure-JAX \texttt{(reset\_fn, step\_fn)} inputs,
+but most real-world environments are written in NumPy.  We provide
+\texttt{gym\_to\_jax}, an AST-based compiler that converts any NumPy
+Gymnasium environment into \texttt{vmap}/\texttt{scan}-compatible JAX
+functions automatically—no manual rewriting required.
+
+\subsection{Pipeline}
+
+\texttt{gym\_to\_jax} parses the source of the environment class, applies nine
+AST transformers in sequence, and \texttt{exec}s the result to produce a
+\texttt{(reset\_fn, step\_fn)} pair.  State is discovered automatically by
+probing \texttt{env.\_\_dict\_\_} after \texttt{reset()}, packed into an
+\texttt{AutoEnvState} NamedTuple pytree.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{AST transformers applied by \texttt{gym\_to\_jax}.}
+\label{tab:transformers}
+\begin{tabular}{lll}
+\toprule
+Transformer & Before & After \\
+\midrule
+\texttt{NpToJnp}          & \texttt{np.linalg.norm} & \texttt{jnp.linalg.norm} \\
+\texttt{RemovePyCasts}    & \texttt{bool(x)}        & \texttt{x} \\
+\texttt{AugAssignToAssign}& \texttt{x += y}         & \texttt{x = x + y} \\
+\texttt{SliceAssignToRebind}& \texttt{x[:] = y}     & \texttt{x = y} \\
+\texttt{IfToWhere}        & \texttt{if c: x = y}    & \texttt{jnp.where(c,y,x)} \\
+\texttt{TernaryToWhere}   & \texttt{a if c else b}  & \texttt{jnp.where(c,a,b)} \\
+\texttt{BoolOpToJax}      & \texttt{a or b}         & \texttt{a | b} \\
+\texttt{NpRandomToJax}    & \texttt{self.np\_random.uniform} & \texttt{jax.random.uniform} \\
+\texttt{SelfFieldToLocal} & \texttt{self.x}         & local + \texttt{AutoEnvState} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The three-line usage is:
+\begin{footnotesize}\begin{verbatim}
+reset_fn, step_fn = gym_to_jax(MyEnv)
+trainer = compile_ppo(reset_fn, step_fn, net)
+result  = trainer.train(PPOConfig(...), seed=0)
+\end{verbatim}\end{footnotesize}
+
+\subsection{MicroduckWalkEnv: 14-DOF Bipedal Locomotion}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{microduck}
+  \caption{MicroduckWalkEnv: a 14-DOF bipedal locomotion environment with
+           61-dimensional observations and 14-dimensional continuous actions,
+           implemented in pure NumPy.}
+  \label{fig:microduck}
+\end{figure}
+
+To validate \texttt{gym\_to\_jax} on a complex env, we convert
+\texttt{MicroduckWalkEnv}: a 14-DOF bipedal locomotion environment with
+61-dimensional observations (joint positions, velocities, IMU, gravity
+projection) and 14-dimensional continuous actions.  The dynamics include
+quaternion-based orientation tracking and per-joint PD control—none of
+which is modified.
+
+After conversion, \texttt{gym\_to\_jax(MicroduckWalkEnv)} passes all JIT and
+\texttt{vmap} compatibility tests (Table~\ref{tab:microduck}).
+
+\begin{table}[H]
+\centering
+\small
+\caption{MicroduckWalkEnv throughput: Tier~2 (Python) vs.\ auto-compiled
+         (gym\_to\_jax + compile\_ppo). 64 envs, H=128, 500K steps.}
+\label{tab:microduck}
+\begin{tabular}{llrr}
+\toprule
+Hardware & Method & Steps/s & Speedup \\
+\midrule
+\multirow{2}{*}{CPU (Apple M)} & Tier~2  & 35\,000  & 1.0\texttimes{} \\
+                                & Auto    & 85\,000  & 2.4\texttimes{} \\
+\midrule
+\multirow{2}{*}{GPU (A100 SXM)} & Tier~2 & 12\,481  & 1.0\texttimes{} \\
+                                 & Auto   & 360\,767 & \textbf{28.9\texttimes{}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+On CPU the 2.4\texttimes{} gain is modest: the 14-DOF dynamics are
+compute-heavy, so a larger fraction of time is spent in already-vectorised
+NumPy math rather than Python dispatch overhead.  On GPU (A100 SXM, RunPod)
+the picture changes sharply: \texttt{vmap} maps all 64 environments onto
+Tensor Core SIMD units and \texttt{lax.scan} eliminates the Python
+per-step overhead entirely, yielding a \textbf{28.9\texttimes{}} speedup.
+Note that the Python Tier~2 baseline is \emph{slower} on GPU than CPU
+(12\,K vs.\ 35\,K steps/s) because small NumPy arrays pay PCIe transfer
+overhead without benefiting from GPU parallelism — exactly the bottleneck
+the XLA compilation eliminates.
+
+%% ── 8. Robotics Connection ───────────────────────────────────────────────────
 \section{Robotics Connection}
 
 Figure~\ref{fig:rollout} shows a Franka Panda cube-stacking rollout from our
@@ -363,7 +465,7 @@ Isaac Lab integration. The contact-rich manipulation task motivates fast RL
 iteration: a 17\texttimes{} reduction in training time per run is a
 17\texttimes{} increase in experiments feasible within a fixed compute budget.
 
-The JAX environment (\texttt{ewm/jax\_env.py}) models the same contact
+The JAX environment (\texttt{rl2xla/jax\_env.py}) models the same contact
 dynamics and success threshold as the NumPy baseline, keeping the speed
 comparison apples-to-apples. The identical \texttt{vmap}/\texttt{scan}
 harness can wrap a GPU-accelerated Isaac Sim step function, which is the
@@ -375,12 +477,15 @@ natural next step for scaling to physically realistic manipulation.
 Replacing the three Python loops in PPO with \texttt{jax.vmap} and
 \texttt{jax.lax.scan} compiles the full training loop into XLA and yields a
 17\texttimes{} end-to-end speedup with no quality loss. We further show
-that this compilation can be automated: \texttt{compile\_ppo} takes any two
-pure-JAX env functions and returns a fully compiled trainer, achieving a
-22\texttimes{} speedup without the caller writing a single \texttt{scan} or
-\texttt{vmap}. Throughput scales with environment count rather than
-saturating, and the same code runs on GPU where the gap is expected to widen
-to 100\texttimes{}+.
+that this compilation can be automated end-to-end: \texttt{gym\_to\_jax}
+converts any NumPy Gymnasium environment into pure-JAX functions via a
+9-transformer AST pipeline, and \texttt{compile\_ppo} wraps them into a
+fully compiled PPO trainer — together achieving a 22\texttimes{} speedup on
+\texttt{PushCubeEnv} and 28.9\texttimes{} on the compute-heavy 14-DOF
+\texttt{MicroduckWalkEnv} (A100 SXM GPU), without the caller writing a single
+\texttt{scan}, \texttt{vmap}, or PRNG call. Throughput scales with environment
+count rather than saturating, and the same pipeline naturally extends to
+GPU-accelerated simulators such as Isaac Lab.
 
 %% ── References ───────────────────────────────────────────────────────────────
 \begin{thebibliography}{9}

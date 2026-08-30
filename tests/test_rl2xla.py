@@ -236,3 +236,52 @@ class TestMicroduckWalkEnv:
         """gym_to_jax(string) UX fix: still raises ConversionError for unknown ids."""
         with pytest.raises((ConversionError, Exception)):
             gym_to_jax("NonExistentEnv-v0")
+
+
+# ── gym_to_jax: MicroduckWalkEnv ─────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def microduck_fns():
+    return gym_to_jax(MicroduckWalkEnv)
+
+
+class TestGymToJaxMicroduck:
+    """gym_to_jax conversion of 14-DOF bipedal env (61-dim obs, 14-dim action)."""
+
+    def test_converts(self, microduck_fns):
+        reset_fn, step_fn = microduck_fns
+        assert callable(reset_fn) and callable(step_fn)
+
+    def test_reset_shape(self, microduck_fns):
+        reset_fn, _ = microduck_fns
+        key = jax.random.PRNGKey(0)
+        state, obs = reset_fn(key)
+        assert obs.shape == (OBS_DIM,)
+
+    def test_step_shape(self, microduck_fns):
+        reset_fn, step_fn = microduck_fns
+        key = jax.random.PRNGKey(1)
+        state, obs = reset_fn(key)
+        action = jnp.zeros(NUM_JOINTS, jnp.float32)
+        new_state, new_obs, reward, done = step_fn(state, action)
+        assert new_obs.shape == (OBS_DIM,)
+        assert reward.shape == ()
+        assert done.shape == ()
+
+    def test_jit(self, microduck_fns):
+        reset_fn, step_fn = microduck_fns
+        key = jax.random.PRNGKey(2)
+        state, obs = jax.jit(reset_fn)(key)
+        action = jnp.zeros(NUM_JOINTS, jnp.float32)
+        jax.jit(step_fn)(state, action)
+
+    def test_vmap(self, microduck_fns):
+        reset_fn, step_fn = microduck_fns
+        keys = jax.random.split(jax.random.PRNGKey(3), 8)
+        states, obss = jax.vmap(reset_fn)(keys)
+        assert obss.shape == (8, OBS_DIM)
+        actions = jnp.zeros((8, NUM_JOINTS), jnp.float32)
+        _, new_obss, rewards, dones = jax.vmap(step_fn)(states, actions)
+        assert new_obss.shape == (8, OBS_DIM)
+        assert rewards.shape == (8,)
+        assert dones.shape == (8,)
