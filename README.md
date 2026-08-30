@@ -2,23 +2,31 @@
 
 **Accelerating robot RL through JAX kernel compilation**
 
-Contact-rich robot manipulation is computationally expensive — thousands of environment interactions per gradient update, all bottlenecked by Python interpreter overhead. This project shows how progressively moving the PPO training loop into JAX's XLA compiler eliminates those bottlenecks, yielding a **17× end-to-end speedup with zero loss in policy quality**.
+<div align="center">
+  <img src="assets/isaaclab/panda_stack_rollout_sequence.png" width="62%" />
+  &nbsp;
+  <img src="assets/isaaclab/panda_stack_scene_overview.png" width="35%" />
+</div>
 
-![Pipeline diagram](assets/plots/pipeline_diagram.png)
+<br>
+
+> Contact-rich robot manipulation is computationally expensive — thousands of environment interactions per gradient update, all bottlenecked by Python interpreter overhead. This project shows how progressively moving the PPO training loop into JAX's XLA compiler eliminates those bottlenecks, yielding a **17× end-to-end speedup with zero loss in policy quality**.
 
 ---
 
-## What we fix
+## The training loop — where time actually goes
 
-Standard RL training has three Python-level bottlenecks. Each one stalls the CPU waiting for the interpreter:
+![Pipeline diagram](assets/plots/pipeline_diagram.png)
+
+Three Python `for`-loops gate every training update. Each one stalls the CPU waiting for the interpreter instead of computing:
 
 | # | Bottleneck | Python code | JAX fix |
 |---|---|---|---|
 | 1 | Parallel env steps | `for env in envs: env.step(a)` | `jax.vmap(step)` — one SIMD kernel |
 | 2 | Rollout collection | `for t in range(H): …` | `jax.lax.scan` — single XLA graph |
-| 3 | GAE + minibatch updates | Python backward loop + minibatch for-loop | `lax.scan(reverse=True)` + scanned epochs |
+| 3 | GAE + minibatch updates | Python backward loop + per-minibatch for-loop | `lax.scan(reverse=True)` + scanned epochs |
 
-Fixing all three requires rewriting the environment itself (`ewm/jax_env.py`) as a pure stateless JAX function so XLA can trace through it. The NumPy-based env cannot be compiled.
+Fixing all three requires rewriting the environment itself (`ewm/jax_env.py`) as a pure stateless JAX function so XLA can trace through it.
 
 ---
 
@@ -35,18 +43,18 @@ Fixing all three requires rewriting the environment itself (`ewm/jax_env.py`) as
 
 Both reach **100% task success** — the speedup is lossless.
 
-The 17× end-to-end vs 7.8× rollout-only gap shows that the GAE backward pass and minibatch loop each contribute meaningfully: eliminating just the rollout loop undersells the gain.
+The 17× end-to-end vs 7.8× rollout-only gap shows that the GAE backward pass and minibatch loop each contribute on top of the rollout; eliminating just one loop undersells the gain.
 
 ### Throughput scaling (rollout collection only)
 
 | Envs | Tier 2 steps/s | Tier 4 steps/s | Speedup |
 |---|---|---|---|
-| 8  | 62,049  | 423,020   | 6.8×  |
-| 16 | 78,344  | 609,976   | 7.8×  |
-| 64 | 97,444  | 1,098,652 | 11.3× |
+| 8   | 62,049  | 423,020   | 6.8×      |
+| 16  | 78,344  | 609,976   | 7.8×      |
+| 64  | 97,444  | 1,098,652 | 11.3×     |
 | 128 | 101,447 | 1,283,713 | **12.7×** |
 
-Tier 2 plateaus at ~100K steps/s — the Python loop is O(N) serial. Tier 4 keeps scaling because `vmap` batches all N envs into one XLA kernel.
+Tier 2 plateaus at ~100K steps/s — the Python loop is O(N) serial. Tier 4 keeps scaling because `vmap` batches all N envs into one XLA SIMD kernel.
 
 ### bfloat16 mixed precision (256 envs · 100 updates)
 
@@ -55,17 +63,13 @@ Tier 2 plateaus at ~100K steps/s — the Python loop is O(N) serial. Tier 4 keep
 | float32  | 24.8 s | 132,000 | 100% |
 | bfloat16 | 32.2 s | 101,700 | 100% |
 
-**bf16 is 30% slower on CPU** — x86 lacks native bf16 compute units, so XLA promotes to fp32 for matmuls. On GPU (A100/H100 Tensor Cores) the same change gives ~1.5–2× speedup.
+**bf16 is 30% slower on CPU** — x86 has no native bf16 compute units, so JAX promotes to fp32 for matmuls. On GPU (A100/H100 Tensor Cores) the same code change gives ~1.5–2× speedup instead.
 
 ---
 
-## Robotics context
+## Why robotics
 
-The task is a 2D contact-rich cube-push — a proxy for the kind of contact-rich manipulation studied in Isaac Lab with the Franka Panda. Fast RL iteration (17× per training run) makes hyperparameter sweeps and architecture searches feasible at robot-scale environment counts (256–1024 parallel sims).
-
-![Isaac Lab Panda scene](assets/isaaclab/panda_stack_scene_overview.png)
-
-The JAX environment (`ewm/jax_env.py`) models the same contact dynamics and success threshold as the NumPy baseline, keeping the comparison apples-to-apples. Plugging a GPU-accelerated Isaac Sim step into the same `vmap`/`scan` harness is the natural next step.
+The task is a contact-rich cube-push, a minimal proxy for the Franka Panda manipulation stack above. Fast RL iteration (17× per training run) makes hyperparameter sweeps and architecture searches feasible at robot-scale environment counts (256–1024 parallel sims). The JAX environment (`ewm/jax_env.py`) models the same contact dynamics and success threshold as the NumPy baseline, keeping comparisons apples-to-apples. Plugging a GPU-accelerated Isaac Sim step into the same `vmap`/`scan` harness is the natural next step.
 
 ---
 

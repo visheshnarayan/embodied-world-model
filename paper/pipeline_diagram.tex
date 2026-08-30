@@ -25,23 +25,25 @@
 \definecolor{graydash}  {RGB}{150, 165, 185}
 
 %% ── Column geometry ─────────────────────────────────────────────────────────
-%  Four columns, each 44 mm wide, 11 mm gaps → total span = 4×44 + 3×11 = 209 mm
-%  Centre columns at x = -82.5, -27.5, +27.5, +82.5  (half-span = 104.5 mm)
 \def\colA{-82.5mm}
 \def\colB{-27.5mm}
 \def\colC{ 27.5mm}
 \def\colD{ 82.5mm}
-\def\colW{44mm}          % box width
-\def\codeW{42mm}         % code-box width (2 mm narrower for visual gap)
+\def\colW{44mm}
+\def\codeW{41mm}
 
-%% ── Row y-positions (anchored to header = 0) ────────────────────────────────
-%  NOTE: macro names must contain only letters — no trailing digits.
+%% ── Row y-positions ─────────────────────────────────────────────────────────
+%  In TikZ y increases upward, so more negative = lower on page.
+%  T2 boxes: anchor=north at \yTtwo  (~28 mm tall → bottom ≈ \yTtwo − 28mm)
+%  Badges sit between T2 bottom and T4 top.
+%  T4 boxes: anchor=north at \yTfour (~30 mm tall → bottom ≈ \yTfour − 30mm)
 \def\yHeader  {  0mm}
-\def\yStage   {-18mm}
-\def\yTtwo    {-34mm}   % top of Tier-2 code boxes
-\def\yTfour   {-57mm}   % top of Tier-4 code boxes
-\def\ySummary {-84mm}
-\def\yLegend  {-96mm}
+\def\yStage   {-20mm}
+\def\yTtwo    {-42mm}   % TOP of Tier-2 code boxes
+\def\yBadge   {-76mm}   % speed badges  (≈ 6 mm above T4 tops)
+\def\yTfour   {-82mm}   % TOP of Tier-4 code boxes
+\def\ySummary {-122mm}
+\def\yLegend  {-136mm}
 
 %% ── Shared styles ────────────────────────────────────────────────────────────
 \tikzset{
@@ -54,24 +56,24 @@
   t2box/.style={
     rectangle, rounded corners=3pt,
     minimum width=\codeW, text width=\codeW,
-    inner xsep=5pt, inner ysep=5pt,
+    inner xsep=5pt, inner ysep=6pt,
     fill=t2bg, draw=t2red!55, line width=0.55pt,
     align=left,
-    font=\fontsize{6.8}{8.5}\selectfont\ttfamily
+    font=\fontsize{6.8}{9}\selectfont\ttfamily
   },
   t4box/.style={
     rectangle, rounded corners=3pt,
     minimum width=\codeW, text width=\codeW,
-    inner xsep=5pt, inner ysep=5pt,
+    inner xsep=5pt, inner ysep=6pt,
     fill=t4bg, draw=t4green!55, line width=0.55pt,
     align=left,
-    font=\fontsize{6.8}{8.5}\selectfont\ttfamily
+    font=\fontsize{6.8}{9}\selectfont\ttfamily
   },
   badge/.style={
     rectangle, rounded corners=7pt,
     fill=badgebg, draw=badgecol, line width=0.65pt,
-    inner xsep=4pt, inner ysep=2pt,
-    font=\fontsize{7.5}{9}\selectfont\bfseries\sffamily,
+    inner xsep=5pt, inner ysep=2.5pt,
+    font=\fontsize{8}{9.5}\selectfont\bfseries\sffamily,
     text=badgecol
   },
   pipeArrow/.style={
@@ -95,19 +97,21 @@
   {PPO Training Loop \textrm{—} Python Bottlenecks and JAX Optimisations};
 
 %% ════════════════════════════════════════════════════════════════════════════
-%%  ROW LABELS (left margin, well clear of column A)
+%%  ROW LABELS  (x = −103 mm, well clear of column A at −82.5 mm)
 %% ════════════════════════════════════════════════════════════════════════════
 \node[rotate=90, font=\fontsize{7.5}{9}\selectfont\bfseries\sffamily, text=navy]
-  at (-100mm, \yStage) {Stage};
+  at (-103mm, \yStage) {Stage};
 
+% Tier-2 label centred vertically in its band: midpoint of −42 mm to −76 mm = −59 mm
 \node[rotate=90, font=\fontsize{7.5}{9}\selectfont\bfseries\sffamily, text=t2red]
-  at (-100mm, -45.5mm) {Tier 2};
+  at (-103mm, -59mm) {Tier 2};
 
+% Tier-4 label centred vertically in its band: midpoint of −82 mm to −118 mm = −100 mm
 \node[rotate=90, font=\fontsize{7.5}{9}\selectfont\bfseries\sffamily, text=t4green]
-  at (-100mm, -68.5mm) {Tier 4};
+  at (-103mm, -100mm) {Tier 4};
 
 %% ════════════════════════════════════════════════════════════════════════════
-%%  STAGE BOXES (top row)
+%%  STAGE BOXES
 %% ════════════════════════════════════════════════════════════════════════════
 \node[stagebox] (s1) at (\colA, \yStage)
   {$\mathcal{E}\!\times\!N$\\\normalfont\scriptsize\sffamily Parallel environments};
@@ -126,7 +130,7 @@
 \draw[pipeArrow] (s2.east) -- (s3.west);
 \draw[pipeArrow] (s3.east) -- (s4.west);
 
-%% ── Feedback (repeat) arrow ──────────────────────────────────────────────────
+%% ── Feedback arrow ──────────────────────────────────────────────────────────
 \draw[->, >={Stealth[length=6pt,width=4pt]}, line width=1pt, dashed, color=graydash]
   (s4.north) -- ++(0,8mm)
   -- ++(-165mm,0)
@@ -136,7 +140,7 @@
   {repeat for \textit{num\_updates}};
 
 %% ════════════════════════════════════════════════════════════════════════════
-%%  TIER-2 CODE BOXES
+%%  TIER-2 CODE BOXES  (anchor = north → top edge at \yTtwo)
 %% ════════════════════════════════════════════════════════════════════════════
 \node[t2box, anchor=north] (t2a) at (\colA, \yTtwo) {%
   {\color{t2red}\fontsize{6.2}{7.5}\selectfont\bfseries\sffamily BOTTLENECK}\\[2pt]%
@@ -161,7 +165,7 @@
   \quad\quad H-1, -1, -1):\\
   \quad $\delta$ = r+$\gamma$V'-V\\
   \quad A[t] = $\delta$+$\gamma\lambda$A\\
-  \quad\quad\,$\cdot$(1-done)%
+  \quad\quad\,$\cdot$(1$-$done)%
 };
 
 \node[t2box, anchor=north] (t2d) at (\colD, \yTtwo) {%
@@ -173,14 +177,14 @@
   \quad\quad opt.step(p)%
 };
 
-%% ── Speed badges (between the two code rows) ─────────────────────────────────
-\node[badge] at (\colA, \yTfour - 0.5mm) {\textbf{6–13}$\boldsymbol{\times}$};
-\node[badge] at (\colB, \yTfour - 0.5mm) {\textbf{7–13}$\boldsymbol{\times}$};
+%% ── Speed badges (centred between T2 bottoms and T4 tops) ───────────────────
+\node[badge] at (\colA, \yBadge) {\textbf{6–13}$\boldsymbol{\times}$};
+\node[badge] at (\colB, \yBadge) {\textbf{7–13}$\boldsymbol{\times}$};
 
 %% ════════════════════════════════════════════════════════════════════════════
-%%  TIER-4 CODE BOXES
+%%  TIER-4 CODE BOXES  (anchor = north → top edge at \yTfour)
 %% ════════════════════════════════════════════════════════════════════════════
-\node[t4box, anchor=north] (t4a) at (\colA, \yTfour + 11mm) {%
+\node[t4box, anchor=north] (t4a) at (\colA, \yTfour) {%
   {\color{t4green}\fontsize{6.2}{7.5}\selectfont\bfseries\sffamily COMPILED}\\[2pt]%
   batch\_step =\\
   \quad jax.vmap(step)\\[2pt]%
@@ -188,7 +192,7 @@
   \quad state, actions)%
 };
 
-\node[t4box, anchor=north] (t4b) at (\colB, \yTfour + 11mm) {%
+\node[t4box, anchor=north] (t4b) at (\colB, \yTfour) {%
   {\color{t4green}\fontsize{6.2}{7.5}\selectfont\bfseries\sffamily COMPILED}\\[2pt]%
   traj, state =\\
   \quad jax.lax.scan(\\
@@ -197,7 +201,7 @@
   \quad\quad length=H)%
 };
 
-\node[t4box, anchor=north] (t4c) at (\colC, \yTfour + 11mm) {%
+\node[t4box, anchor=north] (t4c) at (\colC, \yTfour) {%
   {\color{t4green}\fontsize{6.2}{7.5}\selectfont\bfseries\sffamily COMPILED}\\[2pt]%
   jax.lax.scan(\\
   \quad gae\_step,\\
@@ -206,7 +210,7 @@
   \quad reverse=True)%
 };
 
-\node[t4box, anchor=north] (t4d) at (\colD, \yTfour + 11mm) {%
+\node[t4box, anchor=north] (t4d) at (\colD, \yTfour) {%
   {\color{t4green}\fontsize{6.2}{7.5}\selectfont\bfseries\sffamily COMPILED}\\[2pt]%
   for ep in range(K):\\
   \quad perm = jrandom\\
@@ -219,12 +223,12 @@
 %%  BACKGROUND BANDS
 %% ════════════════════════════════════════════════════════════════════════════
 \begin{scope}[on background layer]
-  % Tier-2 band
+  % Tier-2 band: from just above T2 tops to midpoint between rows
   \fill[t2red!6, rounded corners=4pt]
-    (-96mm, \yTtwo + 1mm) rectangle (96mm, \yTfour + 10mm);
-  % Tier-4 band
+    (-98mm, \yTtwo + 3mm) rectangle (98mm, \yBadge - 4mm);
+  % Tier-4 band: from midpoint to just below summary
   \fill[t4green!6, rounded corners=4pt]
-    (-96mm, \yTfour + 9mm) rectangle (96mm, \ySummary + 5mm);
+    (-98mm, \yBadge - 4mm) rectangle (98mm, \ySummary + 6mm);
 \end{scope}
 
 %% ════════════════════════════════════════════════════════════════════════════
