@@ -1,5 +1,7 @@
 # RL → XLA: Automatic Compilation of Gymnasium RL Environments to JAX Kernels
 
+![Workflow](assets/plots/workflow_header.png)
+
 <div align="center">
   <img src="assets/isaaclab/panda_stack_rollout_01.png" width="32%" />
   <img src="assets/isaaclab/panda_stack_rollout_02.png" width="32%" />
