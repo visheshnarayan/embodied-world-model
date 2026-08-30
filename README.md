@@ -1,6 +1,4 @@
-# JAX-Accelerated Robot RL
-
-**Compiling robot RL training loops from Python to XLA — automatically**
+# RL → XLA: Automatic Compilation of Gymnasium RL Environments to JAX Kernels
 
 <div align="center">
   <img src="assets/isaaclab/panda_stack_rollout_01.png" width="32%" />
